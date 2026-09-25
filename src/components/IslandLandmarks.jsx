@@ -314,8 +314,57 @@ function Shop() {
 // undoing the change to keep facing the leaderboards.
 const STATUE_BASE_YAW = -0.5
 
+// Medallion light show: 2-3 wedges glow at once, never side by side, and the
+// lit set reshuffles every WHEEL_LIGHT_PERIOD seconds. Levels ease toward
+// their target so wedges fade like bulbs rather than snapping.
+const WHEEL_LIGHT_PERIOD = 0.6
+const WHEEL_LIGHT_FADE = 12 // per-second ease rate
+const WHEEL_LIT_INTENSITY = 3
+const WHEEL_DIM = 0.7 // unlit wedge brightness, so the lit ones pop
+
+function pickLitWedges(count, previous) {
+  const n = WHEEL_COLORS.length
+  for (let tries = 0; tries < 50; tries++) {
+    const picked = []
+    const order = Array.from({ length: n }, (_, i) => i).sort(() => Math.random() - 0.5)
+    const want = Math.random() < 0.5 ? 2 : 3
+    for (const i of order) {
+      if (picked.length === want) break
+      // Circular distance >= 2 from every already-picked wedge (no neighbours).
+      if (picked.every((j) => Math.min((i - j + n) % n, (j - i + n) % n) >= 2)) picked.push(i)
+    }
+    const changed = !previous || picked.length !== previous.length || picked.some((i) => !previous.includes(i))
+    if (picked.length >= count && changed) return picked
+  }
+  return [0, 3, 6]
+}
+
 function Statue() {
   const wheelRef = useRef(null)
+  const wedgeMats = useMemo(
+    () =>
+      WHEEL_COLORS.map(
+        (color) => new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0, ...MATERIAL_PBR.PROP }),
+      ),
+    [],
+  )
+  const wedgeLight = useRef({ lit: [], levels: WHEEL_COLORS.map(() => 0), nextAt: 0 })
+  useEffect(() => () => wedgeMats.forEach((m) => m.dispose()), [wedgeMats])
+  useFrame(({ clock }, dt) => {
+    const s = wedgeLight.current
+    const t = clock.elapsedTime
+    if (t >= s.nextAt) {
+      s.lit = pickLitWedges(2, s.lit)
+      s.nextAt = t + WHEEL_LIGHT_PERIOD
+    }
+    const k = 1 - Math.exp(-WHEEL_LIGHT_FADE * dt)
+    wedgeMats.forEach((m, i) => {
+      s.levels[i] += ((s.lit.includes(i) ? 1 : 0) - s.levels[i]) * k
+      const level = s.levels[i]
+      m.emissiveIntensity = level * WHEEL_LIT_INTENSITY
+      m.color.set(WHEEL_COLORS[i]).multiplyScalar(WHEEL_DIM + (1 - WHEEL_DIM) * level)
+    })
+  })
   const leaderboardYaw = useMemo(() => {
     const cx = (LEADERBOARDS[0].x + LEADERBOARDS[1].x) / 2
     const cz = (LEADERBOARDS[0].z + LEADERBOARDS[1].z) / 2
@@ -323,13 +372,13 @@ function Statue() {
   }, [])
   return (
     <group position={[STATUE.x, GROUND_Y, STATUE.z]} rotation-y={STATUE.yaw}>
-      <Box size={[1.8, 0.6, 1.8]} position={[0, 0.3, 0]} color="#8e939c" />
-      <Box size={[1.2, 0.5, 1.2]} position={[0, 0.85, 0]} color="#9aa0aa" />
+      <Box size={[1.8, 0.6, 1.8]} position={[0, 0.3, 0]} color="#c4c9d2" emissive="#c4c9d2" emissiveIntensity={0.25} />
+      <Box size={[1.2, 0.5, 1.2]} position={[0, 0.85, 0]} color="#d0d5de" emissive="#d0d5de" emissiveIntensity={0.25} />
       <group position={[0, 2.35, 0]} rotation-y={leaderboardYaw}>
         <group ref={wheelRef} rotation-x={Math.PI / 2 - 0.15}>
           <mesh castShadow>
             <cylinderGeometry args={[1.25, 1.25, 0.3, 24]} />
-            <Mat color={STONE} />
+            <Mat color="#d0d5de" emissive="#d0d5de" emissiveIntensity={0.25} />
           </mesh>
           {/* Colored decal on the outward (leaderboard-facing) side only — the
               back face and rim stay plain stone. */}
@@ -337,9 +386,8 @@ function Statue() {
             {WHEEL_COLORS.map((color, i) => {
               const thetaLength = (Math.PI * 2) / WHEEL_COLORS.length
               return (
-                <mesh key={color} rotation-y={i * thetaLength} castShadow>
+                <mesh key={color} rotation-y={i * thetaLength} castShadow material={wedgeMats[i]}>
                   <cylinderGeometry args={[1.24, 1.24, 0.04, 4, 1, false, 0, thetaLength]} />
-                  <Mat color={color} />
                 </mesh>
               )
             })}
@@ -465,20 +513,20 @@ function WinSign() {
         <group key={dx} position-x={dx}>
           <mesh position-y={poleTop(dx) / 2} castShadow>
             <cylinderGeometry args={[0.05, 0.05, poleTop(dx), 10]} />
-            <Mat color="#c9ced6" metalness={0.9} roughness={0.25} />
+            <Mat color="#e6eaf0" emissive="#e6eaf0" emissiveIntensity={0.3} metalness={0.2} roughness={0.4} />
           </mesh>
           <mesh position-y={0.02} castShadow receiveShadow>
             <cylinderGeometry args={[0.15, 0.17, 0.04, 16]} />
-            <Mat color="#c9ced6" metalness={0.9} roughness={0.25} />
+            <Mat color="#e6eaf0" emissive="#e6eaf0" emissiveIntensity={0.3} metalness={0.2} roughness={0.4} />
           </mesh>
         </group>
       ))}
       <group position-y={WIN_SIGN.y} rotation-z={ARROW_TILT}>
         <mesh geometry={frameGeo} castShadow>
-          <Mat color="#d4141c" metalness={0.3} roughness={0.35} />
+          <Mat color="#ff2a33" emissive="#ff2a33" emissiveIntensity={0.5} metalness={0.1} roughness={0.35} />
         </mesh>
         <mesh geometry={backingGeo}>
-          <Mat color="#1a1220" side={DoubleSide} />
+          <Mat color="#4a2f5c" emissive="#4a2f5c" emissiveIntensity={0.4} side={DoubleSide} />
         </mesh>
         {[1, -1].map((side) => (
           <mesh key={side} position={[textX, 0, side * 0.006]} rotation-y={side === 1 ? 0 : Math.PI}>
@@ -622,10 +670,10 @@ function Leaderboard({ x, z, title, color, stat }) {
   useEffect(() => () => texture.dispose(), [texture])
   return (
     <group position={[x, GROUND_Y, z]} rotation={[0, Math.PI, 0]}>
-      <Box size={[0.25, 3.2, 0.25]} position={[-1.5, 1.6, 0]} color={WOOD_DARK} />
-      <Box size={[0.25, 3.2, 0.25]} position={[1.5, 1.6, 0]} color={WOOD_DARK} />
-      <Box size={[3.4, 2.4, 0.3]} position={[0, 2.3, 0]} color={WOOD} />
-      <Box size={[3, 2, 0.05]} position={[0, 2.3, 0.17]} color="#5b3419" cast={false} />
+      <Box size={[0.25, 3.2, 0.25]} position={[-1.5, 1.6, 0]} color="#a26c3c" emissive="#a26c3c" emissiveIntensity={0.3} />
+      <Box size={[0.25, 3.2, 0.25]} position={[1.5, 1.6, 0]} color="#a26c3c" emissive="#a26c3c" emissiveIntensity={0.3} />
+      <Box size={[3.4, 2.4, 0.3]} position={[0, 2.3, 0]} color="#c68a4e" emissive="#c68a4e" emissiveIntensity={0.3} />
+      <Box size={[3, 2, 0.05]} position={[0, 2.3, 0.17]} color="#8a5a30" emissive="#8a5a30" emissiveIntensity={0.3} cast={false} />
       <mesh position={[0, 2.3, 0.2]}>
         <planeGeometry args={[2.7, 1.8]} />
         <meshBasicMaterial map={texture} toneMapped={false} />

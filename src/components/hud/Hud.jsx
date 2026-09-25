@@ -218,7 +218,26 @@ function ShopWindow({ onClose, isTouch }) {
   )
 }
 
-function ToolbarButton({ icon, label, onClick, isTouch }) {
+// Glossy rounded-tile backgrounds for ToolbarButton's optional `tile` prop:
+// [top, bottom, border] of the fill gradient.
+const TOOLBAR_TILES = {
+  pink: ['#ff6fae', '#d63384', '#7a1245'],
+  green: ['#6fdc6f', '#2ea043', '#124a1e'],
+  purple: ['#a78bfa', '#7c3aed', '#3b1a78'],
+  blue: ['#5ec8ff', '#1f8fe0', '#0d3f73'],
+}
+
+function ToolbarButton({ icon, label, onClick, isTouch, tile }) {
+  const colors = tile ? TOOLBAR_TILES[tile] : null
+  const tileStyle = colors
+    ? {
+        background: `linear-gradient(180deg, ${colors[0]} 0%, ${colors[1]} 100%)`,
+        border: `${isTouch ? 2 : 3}px solid ${colors[2]}`,
+        boxShadow:
+          'inset 0 3px 0 rgba(255,255,255,0.45), inset 0 -4px 0 rgba(0,0,0,0.2), 0 3px 6px rgba(0,0,0,0.4)',
+      }
+    : undefined
+
   return (
     <button
       type="button"
@@ -228,9 +247,10 @@ function ToolbarButton({ icon, label, onClick, isTouch }) {
       }}
       onMouseEnter={playButtonHover}
       title={`Open ${label}`}
-      className={`pointer-events-auto flex flex-col items-center justify-center gap-1 rounded-lg text-slate-100 transition hover:scale-110 hover:brightness-110 ${
-        isTouch ? 'h-12 w-12' : 'h-20 w-20'
-      }`}
+      style={tileStyle}
+      className={`pointer-events-auto flex flex-col items-center justify-center gap-1 text-slate-100 transition hover:scale-110 hover:brightness-110 ${
+        colors ? 'rounded-xl' : 'rounded-lg'
+      } ${isTouch ? (colors ? 'h-16 w-16' : 'h-12 w-12') : colors ? 'h-28 w-28' : 'h-20 w-20'}`}
     >
       <span
         className="leading-none"
@@ -415,12 +435,14 @@ function LeftCenterControls() {
         <ToolbarButton
           icon="⭐"
           label="Rebirth"
+          tile="pink"
           onClick={() => setOpenWindow('rebirth')}
           isTouch={isTouch}
         />
         <ToolbarButton
           icon="🛒"
           label="Shop"
+          tile="green"
           onClick={() => setOpenWindow('shop')}
           isTouch={isTouch}
         />
@@ -429,12 +451,14 @@ function LeftCenterControls() {
         <ToolbarButton
           icon="🌌"
           label="Obby"
+          tile="purple"
           onClick={goToObby}
           isTouch={isTouch}
         />
         <ToolbarButton
           icon="🚩"
           label="Spawn"
+          tile="blue"
           onClick={goToSpawn}
           isTouch={isTouch}
         />
