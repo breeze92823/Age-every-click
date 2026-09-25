@@ -5,6 +5,7 @@ import { auraStrengthMultiplier } from '../../data/aura.js'
 import { formatShort } from '../../data/format.js'
 import {
   LEVEL_BAR_POLL_MS,
+  LEVEL_BAR_SCALE,
   LEVEL_BAR_WIDTH,
   LEVEL_BAR_HEIGHT,
   LEVEL_BAR_MAX_VW,
@@ -15,16 +16,24 @@ import {
   LEVEL_BAR_TOP,
   LEVEL_BAR_TRANSITION_MS,
   LEVEL_BAR_AGE_FILL_GRADIENT,
+  LEVEL_BAR_POP_MS,
 } from '../../data/levelBar.js'
 
 // Solid cartoon outline for the overlaid text — an 8-direction black shadow
 // at LEVEL_BAR_TEXT_STROKE plus a soft drop. Ported from Ice-Skate's
 // components/hud/LevelBar.jsx, with its PVP-zone health-bar section removed
 // (this template has no PVP zone or player-health system).
-const S = LEVEL_BAR_TEXT_STROKE
+const S = LEVEL_BAR_TEXT_STROKE * LEVEL_BAR_SCALE * 0.75
 const TEXT_OUTLINE =
   `-${S}px -${S}px 0 #000, ${S}px -${S}px 0 #000, -${S}px ${S}px 0 #000, ${S}px ${S}px 0 #000,` +
   `0 -${S}px 0 #000, 0 ${S}px 0 #000, -${S}px 0 0 #000, ${S}px 0 0 #000,` +
+  `0 4px 8px rgba(0,0,0,0.45)`
+
+// Thinner outline for the "Next Age Up in" pill label only.
+const BAR_S = S * 0.5
+const BAR_TEXT_OUTLINE =
+  `-${BAR_S}px -${BAR_S}px 0 #000, ${BAR_S}px -${BAR_S}px 0 #000, -${BAR_S}px ${BAR_S}px 0 #000, ${BAR_S}px ${BAR_S}px 0 #000,` +
+  `0 -${BAR_S}px 0 #000, 0 ${BAR_S}px 0 #000, -${BAR_S}px 0 0 #000, ${BAR_S}px 0 0 #000,` +
   `0 4px 8px rgba(0,0,0,0.45)`
 
 const TITLE_FONT = `900 ${LEVEL_BAR_TITLE_FONT_PX}px/1 ui-rounded, 'Nunito', system-ui, -apple-system, sans-serif`
@@ -44,6 +53,15 @@ export default function LevelBar() {
   useEffect(() => {
     let last = 0
     let trailing = 0
+    let prevTotal = null
+
+    const pop = (el) => {
+      if (!el) return
+      el.style.animation = 'none'
+      // eslint-disable-next-line no-unused-expressions
+      el.offsetHeight // force reflow so the animation restarts
+      el.style.animation = `level-bar-pop ${LEVEL_BAR_POP_MS}ms ease-out`
+    }
 
     const paint = () => {
       last = performance.now()
@@ -53,11 +71,15 @@ export default function LevelBar() {
       const clicksLeft = clicksToNextLevel(speed, gainPerClick)
       if (rebirthRef.current)
         rebirthRef.current.style.display = canAcceptRebirth(level, rebirth) ? 'inline-block' : 'none'
-      if (titleRef.current) titleRef.current.textContent = `Age: ${formatShort(total)}`
+      if (titleRef.current) {
+        titleRef.current.textContent = `Age: ${formatShort(total)}`
+        if (prevTotal !== null && total !== prevTotal) pop(titleRef.current)
+      }
       if (barTextRef.current)
         barTextRef.current.textContent =
           clicksLeft > 0 ? `Next Age Up in: ${formatShort(clicksLeft)} Click${clicksLeft === 1 ? '' : 's'}` : 'Max Age Reached'
       if (fillRef.current) fillRef.current.style.width = `${(frac * 100).toFixed(2)}%`
+      prevTotal = total
     }
 
     const schedule = () => {
@@ -89,8 +111,14 @@ export default function LevelBar() {
   return (
     <div
       data-hud="level-bar"
-      className="pointer-events-none absolute left-1/2 -translate-x-1/2"
-      style={{ top: LEVEL_BAR_TOP, width: LEVEL_BAR_WIDTH, maxWidth: `${LEVEL_BAR_MAX_VW}vw` }}
+      className="pointer-events-none absolute left-1/2"
+      style={{
+        top: LEVEL_BAR_TOP,
+        width: LEVEL_BAR_WIDTH,
+        maxWidth: `${LEVEL_BAR_MAX_VW}vw`,
+        transform: `translateX(-50%) scale(${LEVEL_BAR_SCALE})`,
+        transformOrigin: 'top center',
+      }}
     >
       <div style={{ textAlign: 'center', marginBottom: 6 }}>
         <span
@@ -110,7 +138,10 @@ export default function LevelBar() {
       </div>
 
       <div style={{ textAlign: 'center', marginBottom: 10 }}>
-        <span ref={titleRef} style={{ font: TITLE_FONT, color: '#fff', textShadow: TEXT_OUTLINE }}>
+        <span
+          ref={titleRef}
+          style={{ display: 'inline-block', font: TITLE_FONT, color: '#fff', textShadow: TEXT_OUTLINE }}
+        >
           Age: 0
         </span>
       </div>
@@ -121,7 +152,7 @@ export default function LevelBar() {
             position: 'relative',
             height: LEVEL_BAR_HEIGHT,
             background: 'rgba(0, 0, 0, 0.6)',
-            border: `${LEVEL_BAR_BORDER}px solid #000`,
+            border: `${LEVEL_BAR_BORDER * 0.5}px solid #000`,
             borderRadius: 9999,
             overflow: 'hidden',
             boxShadow: '0 5px 0 rgba(0,0,0,0.28), inset 0 3px 5px rgba(0,0,0,0.12)',
@@ -149,12 +180,23 @@ export default function LevelBar() {
               padding: '0 28px',
             }}
           >
-            <span ref={barTextRef} style={{ font: LABEL_FONT, color: '#fff', textShadow: TEXT_OUTLINE }}>
+            <span
+              ref={barTextRef}
+              style={{ display: 'inline-block', font: LABEL_FONT, color: '#fff', textShadow: BAR_TEXT_OUTLINE }}
+            >
               Next Age Up in: 5 Clicks
             </span>
           </div>
         </div>
       </div>
+
+      <style>{`
+        @keyframes level-bar-pop {
+          0% { transform: scale(1); }
+          40% { transform: scale(1.28); }
+          100% { transform: scale(1); }
+        }
+      `}</style>
     </div>
   )
 }
