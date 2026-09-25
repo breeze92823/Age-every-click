@@ -15,6 +15,7 @@ function snapshot(state) {
     equippedHexPad: state.equippedHexPad,
     ownedAuras: Array.from(state.ownedAuras),
     equippedAura: state.equippedAura,
+    ownedAgeMachines: Array.from(state.ownedAgeMachines),
   }
 }
 

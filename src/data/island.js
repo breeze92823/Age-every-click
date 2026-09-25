@@ -30,10 +30,29 @@ export const BED_DEPTH = 0.03
 
 export const SPAWN_PAD = { x: SPAWN.x / ISLAND_SCALE, z: SPAWN.z / ISLAND_SCALE }
 
+// One tier per machine, left to right — name/rate/dome color match the
+// reference art. Molten also glows a little to read as lava rather than
+// flat black.
+const AGE_MACHINE_TIERS = [
+  { name: 'Basic', rate: '+1 Age/s', color: '#eef1f6', price: 100 },
+  { name: 'Double', rate: '+2 Age/s', color: '#9096a1' },
+  { name: 'Gold', rate: '+3 Age/s', color: '#ffcb3d' },
+  { name: 'VIP', rate: '+4 Age/s', color: '#ff5b7f' },
+  { name: 'Diamond', rate: '+5 Age/s', color: '#5fc9ff' },
+  { name: 'Emerald', rate: '+6 Age/s', color: '#3ddb6a' },
+  { name: 'Molten', rate: '+7 Age/s', color: '#231710', emissive: '#ff5a1f', emissiveIntensity: 0.6 },
+]
+
 export const AGE_MACHINES = {
   z: -26.5,
   spacing: 2.4,
-  colors: ['#eef1f6', '#8a8f99', '#a35bdc', '#f5a623', '#3cc4e8', '#39d353', '#a0632e'],
+  // Stand footprint/height, both local (pre-ISLAND_SCALE) — shared by the
+  // landmark mesh and by terrainHeight.js so the player steps onto it
+  // instead of clipping through.
+  standDepth: 3,
+  standHeight: 0.4,
+  tiers: AGE_MACHINE_TIERS,
+  colors: AGE_MACHINE_TIERS.map((t) => t.color),
 }
 
 export const FREE_BOOTH = { x: -3, z: -20 }

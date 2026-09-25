@@ -14,7 +14,15 @@ import {
   LEADERBOARDS,
   TRAMPOLINE,
 } from '../data/island.js'
-import { makeLabelTexture, makeChevronTexture } from '../systems/canvasTextures.js'
+import {
+  makeLabelTexture,
+  makeTierLabelTexture,
+  makeChevronTexture,
+  makePriceTagTexture,
+  makeBuyButtonTexture,
+} from '../systems/canvasTextures.js'
+import { formatCompact } from '../systems/format.js'
+import { useGameStore } from '../store/useGameStore.js'
 
 // The hub's set pieces, laid out per data/island.js. Visual only for now —
 // nothing here is interactive or collidable yet. Everything faces +Z, toward
@@ -24,6 +32,9 @@ const WOOD = '#9c6232'
 const WOOD_DARK = '#6e4221'
 const STONE = '#a9aeb8'
 const METAL = '#2e3138'
+// AgeMachine's glass shell radius — shared with AgeMachines so the price/Buy
+// banner can sit flush against its +Z (camera-facing) surface.
+const GLASS_RADIUS = 0.6
 
 function Mat({ color, ...props }) {
   return <meshStandardMaterial color={color} {...MATERIAL_PBR.PROP} {...props} />
@@ -49,19 +60,73 @@ function Label({ text, color, position, height = 0.8 }) {
   )
 }
 
-function AgeMachine({ x, color }) {
+// Two-line billboard label for a machine's tier name + Age/s rate.
+function TierLabel({ name, rate, color, position }) {
+  const { texture, aspect } = useMemo(() => makeTierLabelTexture(name, rate, { nameColor: color }), [name, rate, color])
+  useEffect(() => () => texture.dispose(), [texture])
+  const height = 0.6
+  return (
+    <sprite position={position} scale={[height * aspect, height, 1]}>
+      <spriteMaterial map={texture} transparent depthWrite={false} />
+    </sprite>
+  )
+}
+
+// Coin + price capsule, stacked above BuyButton — the top half of the buy
+// banner. Disappears once the machine is owned (AgeMachines below).
+function PriceTag({ price, position }) {
+  const { texture, aspect } = useMemo(() => makePriceTagTexture(formatCompact(price)), [price])
+  useEffect(() => () => texture.dispose(), [texture])
+  const height = 0.4
+  return (
+    <sprite position={position} scale={[height * aspect, height, 1]}>
+      <spriteMaterial map={texture} transparent depthWrite={false} />
+    </sprite>
+  )
+}
+
+// Clickable "Buy" pill under the price tag. Fixed to face +Z (not a
+// billboard like the other labels) so it doesn't turn toward whichever side
+// the player is viewing from. A plane's default normal already points +Z,
+// so no rotation is needed. Meshes raycast like sprites do, so this still
+// takes r3f's onClick directly — buyAgeMachine re-checks affordability itself.
+function BuyButton({ index, position }) {
+  const buyAgeMachine = useGameStore((s) => s.buyAgeMachine)
+  const { texture, aspect } = useMemo(() => makeBuyButtonTexture(), [])
+  useEffect(() => () => texture.dispose(), [texture])
+  const height = 0.34
+  return (
+    <mesh
+      position={position}
+      onClick={(e) => {
+        e.stopPropagation()
+        buyAgeMachine(index)
+      }}
+    >
+      <planeGeometry args={[height * aspect, height]} />
+      <meshBasicMaterial map={texture} transparent depthWrite={false} side={DoubleSide} />
+    </mesh>
+  )
+}
+
+function AgeMachine({ x, color, emissive, emissiveIntensity }) {
+  const domeEmissive = emissive ? emissiveIntensity : 0
   return (
     <group position={[x, 0.4, 0]}>
       <mesh position-y={0.2} castShadow receiveShadow>
         <cylinderGeometry args={[0.8, 0.9, 0.4, 16]} />
+        <Mat color={color} emissive={emissive} emissiveIntensity={domeEmissive} />
+      </mesh>
+      <mesh position={[0, 1.4, -0.72]} castShadow>
+        <cylinderGeometry args={[0.12, 0.12, 2, 12]} />
         <Mat color={METAL} />
       </mesh>
-      <mesh position-y={1.15} castShadow>
-        <cylinderGeometry args={[0.45, 0.45, 1.5, 16]} />
-        <Mat color={color} emissive={color} emissiveIntensity={0.25} />
+      <mesh position={[0, 2.4, -0.585]} rotation-x={Math.PI / 2} castShadow>
+        <cylinderGeometry args={[0.12, 0.12, 0.27, 12]} />
+        <Mat color={METAL} />
       </mesh>
       <mesh position-y={1.3}>
-        <cylinderGeometry args={[0.6, 0.6, 1.8, 20, 1, true]} />
+        <cylinderGeometry args={[GLASS_RADIUS, GLASS_RADIUS, 1.8, 20, 1, true]} />
         <meshStandardMaterial
           color="#dff3ff"
           transparent
@@ -73,26 +138,44 @@ function AgeMachine({ x, color }) {
       </mesh>
       <mesh position-y={2.3} castShadow>
         <cylinderGeometry args={[0.7, 0.7, 0.2, 16]} />
-        <Mat color={METAL} />
+        <Mat color={color} emissive={emissive} emissiveIntensity={domeEmissive} />
       </mesh>
       <mesh position-y={2.4} castShadow>
         <sphereGeometry args={[0.45, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <Mat color={color} />
+        <Mat color={color} emissive={emissive} emissiveIntensity={domeEmissive} />
       </mesh>
     </group>
   )
 }
 
 function AgeMachines() {
-  const { z, spacing, colors } = AGE_MACHINES
-  const mid = (colors.length - 1) / 2
+  const { z, spacing, tiers, standDepth, standHeight } = AGE_MACHINES
+  const ownedAgeMachines = useGameStore((s) => s.ownedAgeMachines)
+  const mid = (tiers.length - 1) / 2
   return (
     <group position={[0, GROUND_Y, z]}>
-      <Box size={[colors.length * spacing + 1, 0.4, 3]} position={[0, 0.2, 0]} color="#5b606b" />
-      {colors.map((c, i) => (
-        <AgeMachine key={c} x={(i - mid) * spacing} color={c} />
-      ))}
-      <Label text="AGE MACHINES" color="#ffd23d" position={[0, 4.1, 0]} height={1.1} />
+      <Box
+        size={[tiers.length * spacing + 1, standHeight, standDepth]}
+        position={[0, standHeight / 2, 0]}
+        color="#5b606b"
+      />
+      {tiers.map((t, i) => {
+        const x = (i - mid) * spacing
+        const forSale = t.price != null && !ownedAgeMachines.has(i)
+        return (
+          <group key={t.name}>
+            <AgeMachine x={x} color={t.color} emissive={t.emissive} emissiveIntensity={t.emissiveIntensity} />
+            <TierLabel name={t.name} rate={t.rate} color={t.emissive ?? t.color} position={[x, 3.7, 0]} />
+            {forSale && (
+              <>
+                <PriceTag price={t.price} position={[x, 1.95, GLASS_RADIUS + 0.4]} />
+                <BuyButton index={i} position={[x, 1.55, GLASS_RADIUS + 0.1]} />
+              </>
+            )}
+          </group>
+        )
+      })}
+      <Label text="AGE MACHINES" color="#ffd23d" position={[0, 5.4, 0]} height={1.1} />
     </group>
   )
 }

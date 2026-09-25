@@ -6,6 +6,7 @@ import { useGameStore } from '../../store/useGameStore.js'
 import { canAcceptRebirth, rebirthRequirement } from '../../data/progression.js'
 import { SHOP_ITEMS } from '../../data/shop.js'
 import { makeStudOverlayDataURL } from '../../systems/studTexture.js'
+import { formatCompact } from '../../systems/format.js'
 import TouchControls from './TouchControls.jsx'
 import RotatePrompt from './RotatePrompt.jsx'
 import LevelBar from './LevelBar.jsx'
@@ -28,21 +29,6 @@ import { useSettings, useTouchMode } from './hooks.js'
 // gain from Ice-Skate (systems/speedGain.js) was removed since this game
 // has no such mechanic, and no click-to-gain button or Set Speed badge
 // exists in this HUD yet.
-
-// 1000 -> "1K", 1500 -> "1.5K", 2_000_000 -> "2M". Trims a trailing ".0".
-function formatCompact(n) {
-  const abs = Math.abs(n)
-  if (abs < 1000) return String(n)
-  const units = [
-    { value: 1e9, suffix: 'B' },
-    { value: 1e6, suffix: 'M' },
-    { value: 1e3, suffix: 'K' },
-  ]
-  const { value, suffix } = units.find((u) => abs >= u.value)
-  const scaled = n / value
-  const text = scaled.toFixed(1).replace(/\.0$/, '')
-  return `${text}${suffix}`
-}
 
 // Shared chrome for every left-center HUD popup (Rebirth, Shop): a
 // transparent panel with the title floating above its top-left corner and

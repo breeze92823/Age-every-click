@@ -16,17 +16,17 @@ export default function App() {
           antialias: true,
           powerPreference: 'high-performance',
           toneMapping: ACESFilmicToneMapping,
-          toneMappingExposure: 1.4,
+          toneMappingExposure: 1.1,
           outputColorSpace: SRGBColorSpace,
         }}
         camera={{ fov: 55, near: 0.1, far: 500, position: [0, 6, 12] }}
       >
-        <color attach="background" args={['#bcdcff']} />
-        <fog attach="fog" args={['#bcdcff', 200, 400]} />
-        <hemisphereLight args={['#eaf3ff', '#b7a98f', 1.4]} />
+        <color attach="background" args={['#a9c8e6']} />
+        <fog attach="fog" args={['#a9c8e6', 200, 400]} />
+        <hemisphereLight args={['#dce8f2', '#a89a80', 1.05]} />
         <directionalLight
           position={[30, 45, 20]}
-          intensity={2.3}
+          intensity={1.8}
           castShadow
           shadow-mapSize={[2048, 2048]}
           shadow-camera-left={-45}

@@ -4,6 +4,7 @@ import { getYaw } from './cameraOrbit.js'
 import { PLAYER_MOVE_SPEED } from '../data/progression.js'
 import { terrainHeightAt } from './terrainHeight.js'
 import { conveyorPushAt } from './conveyor.js'
+import { resolveAgeMachineCollision } from './ageMachineCollision.js'
 
 // Kinematic capsule, stepped once per frame: apply input -> gravity ->
 // integrate -> clamp to the ground height under the player's feet. Ground
@@ -69,6 +70,10 @@ export function step(dt) {
   p.x += player.velocity.x * dt
   p.y += player.velocity.y * dt
   p.z += player.velocity.z * dt
+
+  const blocked = resolveAgeMachineCollision(p.x, p.z, player.dims.radius)
+  p.x = blocked.x
+  p.z = blocked.z
 
   const groundY = terrainHeightAt(p.x, p.z)
   if (p.y <= groundY) {

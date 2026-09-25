@@ -18,6 +18,7 @@ import {
 import { HEX_SPEED_PAD_TIERS } from '../data/hexPowerPad.js'
 import { AURA_TIERS, auraStrengthMultiplier } from '../data/aura.js'
 import { SHOP_ITEMS } from '../data/shop.js'
+import { AGE_MACHINES } from '../data/island.js'
 
 // THE store — durable state + derive() + all actions. No middleware (no
 // persist, no immer, no subscribeWithSelector) — ported from Ice-Skate's
@@ -45,6 +46,11 @@ export const useGameStore = create((set, get) => ({
   equippedHexPad: 0,
   ownedAuras: new Set(),
   equippedAura: null,
+  // Indices into data/island.js's AGE_MACHINES.tiers that the player has
+  // bought. Buying an Age Machine has no other effect yet (see
+  // components/hud/Hud.jsx's note that wins/speed have no earn action in
+  // this template) — this is ownership only, not a production tick.
+  ownedAgeMachines: new Set(),
 
   // One click's worth of Speed. `multiplier` defaults to 1 (kept for parity
   // with Ice-Skate's walking-tick call site, which passed a treadmill's x2/x3
@@ -132,6 +138,16 @@ export const useGameStore = create((set, get) => ({
     set({ equippedAura: null })
   },
 
+  // Called from IslandLandmarks.jsx's per-machine Buy sprite. Re-checks
+  // ownership and affordability itself, same guard as buyHexPad/buyAuraTier.
+  buyAgeMachine(index) {
+    const state = get()
+    if (state.ownedAgeMachines.has(index)) return
+    const tier = AGE_MACHINES.tiers[index]
+    if (!tier || tier.price == null || state.wins < tier.price) return
+    set((s) => ({ wins: s.wins - tier.price, ownedAgeMachines: new Set(s.ownedAgeMachines).add(index) }))
+  },
+
   // Called from components/hud/Hud.jsx's ShopItemCard "Buy with Wins"
   // button — the wins-priced alternative to the SKU's (unwired) Bux price.
   buyShopItemWithWins(id) {
@@ -155,6 +171,7 @@ export const useGameStore = create((set, get) => ({
         equippedHexPad: 0,
         ownedAuras: new Set(),
         equippedAura: null,
+        ownedAgeMachines: new Set(),
       }),
     )
   },
@@ -175,6 +192,7 @@ export const useGameStore = create((set, get) => ({
       const equippedHexPad = ownedHexPads.has(saved.equippedHexPad) ? saved.equippedHexPad : 0
       const ownedAuras = new Set(Array.isArray(saved.ownedAuras) ? saved.ownedAuras : [])
       const equippedAura = ownedAuras.has(saved.equippedAura) ? saved.equippedAura : null
+      const ownedAgeMachines = new Set(Array.isArray(saved.ownedAgeMachines) ? saved.ownedAgeMachines : [])
       const tier = HEX_SPEED_PAD_TIERS[equippedHexPad]
       return derive({
         ...s,
@@ -186,6 +204,7 @@ export const useGameStore = create((set, get) => ({
         speedPerGain: tier ? tier.speedPerGain : s.speedPerGain,
         ownedAuras,
         equippedAura,
+        ownedAgeMachines,
       })
     })
   },
