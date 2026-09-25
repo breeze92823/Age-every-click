@@ -15,8 +15,20 @@
 //   viking  — horned helmet, grey beard, chainmail, leather bracers and boots
 //   skeleton — bare bones: skull, ribcage, spine, pelvis and limb bones
 //   ghost   — translucent body, grinning head, black claws, a tail for legs
+// GIRL_OUTFITS holds the girl counterpart of each, under the same id:
+//   plain   — white figure, pink bow, jagged shirt hem over a pink skirt
+//   striped — brown ponytail, pink/white striped tee, denim skirt, sneakers
+//   suit    — sleek bun, black blazer, pearls, pencil skirt, tights, heels
+//   shades  — long blonde hair, aviators, black jacket, grey jeans, boots
+//   beard   — wavy auburn hair, gold hoops, teal polka-dot sundress, sandals
+//   grandpa — grandma: grey bun, round glasses, lavender cardigan, pearls
+//   elder   — floor-length white hair, plaid dress to the ankles, lace collar
+//   viking  — shieldmaiden: horned helmet, blonde braids, mail skirt
+//   skeleton — the same bones with a pink bow and lashes
+//   ghost   — the same ghost with lashes, blush and a pink bow
 // outfitForLevel() picks the one shown for the player's Age level (plain at level 0
 // through ghost at level 9, ghost from then on); DEFAULT_OUTFIT is the fallback.
+// buildDefaultCharacter()'s gender picks the boy or girl version.
 //
 // Each part is a rigid rounded box parented straight to its bone rather than
 // a skinned mesh: every part of the base rig is weighted to a single bone
@@ -1073,9 +1085,9 @@ function hornGeometry(side) {
   return geo
 }
 
-function dressViking(bones) {
-  const b = base()
-  const m = cached('viking', () => ({
+// Helmet, mail, leather and beard assets, shared with the girl's shieldmaiden.
+function vikingShared() {
+  return cached('viking', () => ({
     // Helmet: a flattened dome over the crown, a riveted rim band, a crest,
     // and a spectacle guard (eye rings + nose bar) drawn over the face.
     dome: new SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2),
@@ -1151,6 +1163,11 @@ function dressViking(bones) {
       }),
     }),
   }))
+}
+
+function dressViking(bones) {
+  const b = base()
+  const m = vikingShared()
 
   dressHead(bones)
   const n = bones.neck1
@@ -1419,6 +1436,720 @@ function dressGhost(bones) {
   }
 }
 
+// ============================================================================
+// Girls — one per Age level, the same ten stages as the boys above, on the
+// same bare rig and joint pivots (see GIRL_OUTFITS below).
+// ============================================================================
+
+// The standard face with lashes and rosy cheeks; optionally lipstick on the
+// smile and thin arched brows.
+function girlFaceTexture({ lips = null, brows = false, blush = 'rgba(244,150,170,0.55)' } = {}) {
+  return canvasTexture(256, 256, (ctx) => {
+    ctx.fillStyle = blush
+    for (const x of [72, 184]) {
+      ctx.beginPath()
+      ctx.ellipse(x, 140, 17, 10, 0, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.fillStyle = FACE_INK
+    ctx.strokeStyle = FACE_INK
+    ctx.lineCap = 'round'
+    ctx.lineWidth = 5
+    for (const [x, s] of [[98, -1], [158, 1]]) {
+      ctx.beginPath()
+      ctx.ellipse(x, 104, 11, 17, 0, 0, Math.PI * 2)
+      ctx.fill()
+      // Three lashes flicking out from the outer top of each eye.
+      for (const a of [0.35, 0.75, 1.15]) {
+        const dx = s * Math.cos(a)
+        const dy = -Math.sin(a)
+        ctx.beginPath()
+        ctx.moveTo(x + dx * 11, 104 + dy * 17)
+        ctx.lineTo(x + dx * 21, 104 + dy * 27)
+        ctx.stroke()
+      }
+      if (brows) {
+        ctx.beginPath()
+        ctx.arc(x, 98, 26, Math.PI * 1.25, Math.PI * 1.75)
+        ctx.stroke()
+      }
+    }
+    ctx.strokeStyle = lips || FACE_INK
+    ctx.lineWidth = lips ? 11 : 9
+    ctx.beginPath()
+    ctx.arc(128, 128, 46, Math.PI * 0.22, Math.PI * 0.78)
+    ctx.stroke()
+  })
+}
+
+// A skirt hung from the waist (local y 0 down to -len), flaring from `top`
+// [width, depth] at the waist to `hem` [width, depth]. It rides on Spine1, so
+// the legs swing underneath it.
+function skirtGeometry(len, top, hem) {
+  const geo = new RoundedBoxGeometry(hem[0], len, hem[1], 4, 0.14)
+  geo.translate(0, -len / 2, 0)
+  const pos = geo.attributes.position
+  const kx = top[0] / hem[0]
+  const kz = top[1] / hem[1]
+  for (let i = 0; i < pos.count; i++) {
+    const t = -pos.getY(i) / len // 0 at the waist, 1 at the hem
+    pos.setX(i, pos.getX(i) * (kx + (1 - kx) * t))
+    pos.setZ(i, pos.getZ(i) * (kz + (1 - kz) * t))
+  }
+  geo.computeVertexNormals()
+  return geo
+}
+const WAIST_Y = 0.5 // Spine1-local height skirts hang from, just above the hips
+const SKIRT_TOP = [TORSO[0] + 0.08, TORSO[2] + 0.08]
+
+function skirt(bones, geo, material) {
+  bones.spine1.add(part(geo, material, 0, WAIST_Y, 0))
+}
+
+// A hair bow: two tilted wings round a knot, facing +Z.
+function bow(material, x, y, z, scale = 1, tilt = 0) {
+  const g = cached('bow', () => ({
+    wing: new RoundedBoxGeometry(0.5, 0.38, 0.16, 3, 0.07),
+    knot: new RoundedBoxGeometry(0.2, 0.24, 0.22, 3, 0.07),
+  }))
+  const group = new Group()
+  group.position.set(x, y, z)
+  group.scale.setScalar(scale)
+  group.rotation.z = tilt
+  for (const s of [-1, 1]) {
+    const wing = part(g.wing, material, s * 0.27, 0, 0)
+    wing.rotation.z = s * 0.3
+    group.add(wing)
+  }
+  group.add(part(g.knot, material, 0, 0, 0.03))
+  return group
+}
+
+// Shared hairdo pieces: a crown cap, an optional fringe, sides falling to the
+// jaw ('short') or past it ('long'), and an optional back panel.
+function girlHair(n, material, { sides = 'short', fringe = true, back = true } = {}) {
+  const g = cached('girlHair', () => ({
+    cap: new RoundedBoxGeometry(HEAD[0] + 0.2, 0.55, HEAD[2] + 0.2, 4, 0.24),
+    fringe: new RoundedBoxGeometry(HEAD[0] + 0.14, 0.32, 0.24, 3, 0.11),
+    short: new RoundedBoxGeometry(0.22, 1.2, 1.2, 4, 0.09),
+    long: new RoundedBoxGeometry(0.22, 1.7, 1.2, 4, 0.09),
+    back: new RoundedBoxGeometry(HEAD[0] + 0.3, 1.5, 0.36, 4, 0.15),
+  }))
+  const top = HEAD[1]
+  n.add(part(g.cap, material, 0, top - 0.1, 0))
+  if (fringe) n.add(part(g.fringe, material, 0, top - 0.24, HEAD[2] / 2 + 0.05))
+  const len = sides === 'long' ? 1.7 : 1.2
+  for (const s of [-1, 1]) n.add(part(g[sides], material, s * (HEAD[0] / 2 + 0.1), top - 0.2 - len / 2, -0.15))
+  if (back) n.add(part(g.back, material, 0, top - 0.85, -HEAD[2] / 2 - 0.16))
+}
+
+// A string of pearls drawn round a neckline, dipping `dip` px at the centre.
+function pearls(ctx, cx, halfW, y0, dip) {
+  for (let i = 0; i <= 12; i++) {
+    const u = (i / 12) * 2 - 1
+    const x = cx + u * halfW
+    const y = y0 + (1 - u * u) * dip
+    ctx.fillStyle = '#fbf8f2'
+    ctx.strokeStyle = '#cfc6b8'
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    ctx.arc(x, y, 5, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+  }
+}
+
+function glossyShoe(color) {
+  return mat({ color, roughness: 0.3 })
+}
+
+// --- plain (girl): white figure, pink bow, jagged hem over a pink skirt -----
+const PINK = '#ef6fa3'
+
+function dressGirlPlain(bones) {
+  const b = base()
+  const m = cached('girlPlain', () => ({
+    face: decalMat(girlFaceTexture()),
+    skirt: skirtGeometry(1.15, SKIRT_TOP, [TORSO[0] + 0.6, TORSO[2] + 0.7]),
+    skirtMat: mat({
+      // Pink skirt with the white shirt hem zig-zagging over its top.
+      map: canvasTexture(128, 128, (ctx, w, h) => {
+        const grad = ctx.createLinearGradient(0, 0, 0, h)
+        grad.addColorStop(0, '#f9c3da')
+        grad.addColorStop(1, '#f5a9c9')
+        ctx.fillStyle = grad
+        ctx.fillRect(0, 0, w, h)
+        const hem = h * 0.12
+        const teeth = 4
+        ctx.fillStyle = SKIN
+        ctx.beginPath()
+        ctx.moveTo(0, 0)
+        ctx.lineTo(0, hem)
+        for (let i = 0; i < teeth; i++) {
+          const x0 = (i / teeth) * w
+          ctx.lineTo(x0 + w / teeth / 2, hem + h * 0.1)
+          ctx.lineTo(x0 + w / teeth, hem)
+        }
+        ctx.lineTo(w, 0)
+        ctx.closePath()
+        ctx.fill()
+      }),
+    }),
+    shoe: mat({ color: '#f9cfe0' }),
+    bow: mat({ color: PINK }),
+  }))
+
+  dressHead(bones, m.face)
+  bones.neck1.add(bow(m.bow, 0.35, HEAD[1] + 0.05, 0.25, 1.1, -0.3))
+  bones.spine1.add(part(b.torso, b.skin, 0, TORSO_Y, 0))
+  skirt(bones, m.skirt, m.skirtMat)
+  for (const arm of bones.arms) arm.add(part(b.arm, b.skin, 0, ARM_Y, ARM_Z))
+  for (const [leg, side] of bones.legs) {
+    leg.add(part(b.leg, b.skin, side * 0.1, LEG_Y, 0))
+    leg.add(part(b.shoe, m.shoe, side * 0.1, SHOE_Y, 0.04))
+  }
+}
+
+// --- striped (girl): brown ponytail, pink striped tee, denim skirt ---------
+const STRIPE_PINK = '#e8467c'
+
+function dressGirlStriped(bones) {
+  const b = base()
+  const m = cached('girlStriped', () => ({
+    face: decalMat(girlFaceTexture()),
+    shirt: mat({ map: canvasTexture(64, 256, (ctx, w, h) => stripes(ctx, w, h, 12, STRIPE_PINK, STRIPE_WHITE)) }),
+    sleeveShirt: mat({ map: canvasTexture(64, 128, (ctx, w, h) => stripes(ctx, w, h, 5, STRIPE_PINK, STRIPE_WHITE)) }),
+    sleeve: new RoundedBoxGeometry(ARM[0] + 0.12, SLEEVE_H, ARM[2] + 0.12, 4, 0.3),
+    collar: decalMat(
+      canvasTexture(256, 128, (ctx, w, h) => {
+        // A pink scoop-neck trim with skin showing inside it.
+        ctx.fillStyle = STRIPE_PINK
+        ctx.beginPath()
+        ctx.ellipse(w / 2, 0, w * 0.32, h * 0.8, 0, 0, Math.PI)
+        ctx.fill()
+        ctx.fillStyle = SKIN
+        ctx.beginPath()
+        ctx.ellipse(w / 2, 0, w * 0.25, h * 0.6, 0, 0, Math.PI)
+        ctx.fill()
+      }),
+    ),
+    skirt: skirtGeometry(1.2, SKIRT_TOP, [TORSO[0] + 0.5, TORSO[2] + 0.6]),
+    denim: mat({
+      map: canvasTexture(64, 128, (ctx, w, h) => {
+        grain(ctx, w, h, '#3a6db0', '#4a7dc0', 10)
+        ctx.fillStyle = '#e4b04a' // stitched hem
+        for (let x = 2; x < w; x += 8) ctx.fillRect(x, h * 0.88, 4, 2)
+      }),
+    }),
+    sneaker: mat({
+      map: canvasTexture(64, 64, (ctx, w, h) => {
+        ctx.fillStyle = '#f7f7f7'
+        ctx.fillRect(0, 0, w, h)
+        ctx.fillStyle = STRIPE_PINK // side stripe
+        ctx.fillRect(0, h * 0.4, w, h * 0.12)
+        ctx.fillStyle = '#9aa0a8' // sole band
+        ctx.fillRect(0, h * 0.78, w, h * 0.22)
+      }),
+    }),
+    hair: mat({ color: HAIR }),
+    ponytail: skinStrand(hangingStrand(0.62, 2.3, 0.5, { tipX: 0.45, tipZ: 0.6, bend: -0.5 }), 6),
+    scrunchie: mat({ color: STRIPE_PINK }),
+  }))
+
+  dressHead(bones, m.face)
+  const n = bones.neck1
+  const top = HEAD[1]
+  const front = HEAD[2] / 2
+  girlHair(n, m.hair)
+  // High ponytail swinging with hairPhysics.js, kept clear of the back.
+  hairStrand(bones, n, m.ponytail, m.hair, 0, top - 0.3, -front - 0.26, -1, 1.06)
+  n.add(bow(m.scrunchie, 0, top - 0.25, -front - 0.18, 0.7))
+
+  bones.spine1.add(part(b.torso, m.shirt, 0, TORSO_Y, 0))
+  bones.spine1.add(decal(m.collar, 1.1, 0.55, 0, TORSO[1] - 0.275, TORSO[2] / 2 + 0.004))
+  skirt(bones, m.skirt, m.denim)
+  for (const arm of bones.arms) {
+    arm.add(part(b.arm, b.skin, 0, ARM_Y, ARM_Z))
+    arm.add(part(m.sleeve, m.sleeveShirt, 0, -SLEEVE_H / 2 + 0.02, ARM_Z))
+  }
+  for (const [leg, side] of bones.legs) {
+    leg.add(part(b.leg, b.skin, side * 0.1, LEG_Y, 0))
+    leg.add(part(b.shoe, m.sneaker, side * 0.1, SHOE_Y, 0.04))
+  }
+}
+
+// --- suit (girl): sleek bun, black blazer, pearls, pencil skirt, heels -----
+function dressGirlSuit(bones) {
+  const b = base()
+  const m = cached('girlSuit', () => ({
+    face: decalMat(girlFaceTexture({ lips: '#b3263a', brows: true })),
+    suit: mat({ color: SUIT, roughness: 0.55 }),
+    sleeve: new RoundedBoxGeometry(ARM[0] + 0.1, CUFF_H, ARM[2] + 0.1, 4, 0.3),
+    // Blazer front: white blouse V, pearls, lapels, hem line, one button.
+    front: decalMat(
+      canvasTexture(256, 220, (ctx, w, h) => {
+        const cx = w / 2
+        const vBottom = h * 0.52
+        ctx.fillStyle = '#f7f5f8'
+        ctx.beginPath()
+        ctx.moveTo(cx - w * 0.22, 0)
+        ctx.lineTo(cx, vBottom)
+        ctx.lineTo(cx + w * 0.22, 0)
+        ctx.closePath()
+        ctx.fill()
+        ctx.fillStyle = SKIN // open blouse collar
+        ctx.beginPath()
+        ctx.moveTo(cx - w * 0.1, 0)
+        ctx.lineTo(cx, h * 0.26)
+        ctx.lineTo(cx + w * 0.1, 0)
+        ctx.closePath()
+        ctx.fill()
+        pearls(ctx, cx, w * 0.1, 6, 36)
+        ctx.strokeStyle = SUIT_LINE
+        ctx.lineWidth = 4
+        ctx.beginPath()
+        ctx.moveTo(cx - w * 0.22, 0)
+        ctx.lineTo(cx - w * 0.29, h * 0.25)
+        ctx.lineTo(cx, vBottom + 4)
+        ctx.lineTo(cx + w * 0.29, h * 0.25)
+        ctx.lineTo(cx + w * 0.22, 0)
+        ctx.moveTo(cx, vBottom + 4)
+        ctx.lineTo(cx, h)
+        ctx.moveTo(0, h - 4)
+        ctx.lineTo(w, h - 4)
+        ctx.stroke()
+        ctx.fillStyle = SUIT_LINE
+        ctx.beginPath()
+        ctx.arc(cx + 10, h * 0.7, 5, 0, Math.PI * 2)
+        ctx.fill()
+      }),
+    ),
+    skirt: skirtGeometry(1.55, SKIRT_TOP, [TORSO[0] + 0.2, TORSO[2] + 0.4]),
+    tights: mat({ color: '#2b2b31', roughness: 0.5 }),
+    heel: glossyShoe('#0b0b0c'),
+    hair: mat({ color: SUIT_HAIR }),
+    bun: new SphereGeometry(0.44, 16, 12),
+    sweep: new RoundedBoxGeometry(1.0, 0.3, 0.26, 3, 0.12),
+  }))
+
+  dressHead(bones, m.face)
+  const n = bones.neck1
+  const top = HEAD[1]
+  const front = HEAD[2] / 2
+  // Sleek, pulled back into a bun, with a side-swept front.
+  girlHair(n, m.hair, { fringe: false })
+  const sweep = part(m.sweep, m.hair, -0.3, top - 0.18, front + 0.05)
+  sweep.rotation.z = 0.25
+  n.add(sweep)
+  n.add(part(m.bun, m.hair, 0, top - 0.3, -front - 0.4))
+
+  bones.spine1.add(part(b.torso, m.suit, 0, TORSO_Y, 0))
+  bones.spine1.add(decal(m.front, TORSO[0], TORSO[1] - 0.05, 0, TORSO_Y, TORSO[2] / 2 + 0.004))
+  skirt(bones, m.skirt, m.suit)
+  for (const arm of bones.arms) {
+    arm.add(part(b.arm, b.skin, 0, ARM_Y, ARM_Z))
+    arm.add(part(m.sleeve, m.suit, 0, -CUFF_H / 2 + 0.03, ARM_Z))
+  }
+  for (const [leg, side] of bones.legs) {
+    leg.add(part(b.leg, m.tights, side * 0.1, LEG_Y, 0))
+    leg.add(part(b.shoe, m.heel, side * 0.1, SHOE_Y, 0.04))
+  }
+}
+
+// --- shades (girl): long blonde hair, aviators, black jacket, grey jeans ---
+const BLONDE = '#e2b865'
+const BLONDE_LIGHT = '#f0cf85'
+
+function dressGirlShades(bones) {
+  const b = base()
+  const m = cached('girlShades', () => ({
+    face: decalMat(girlFaceTexture({ lips: '#c22a3a' })),
+    hair: mat({ map: canvasTexture(128, 128, (ctx, w, h) => grain(ctx, w, h, BLONDE, BLONDE_LIGHT, 12)) }),
+    hairBack: skinStrand(hangingStrand(HEAD[0] + 0.24, 3.0, 0.38, { tipX: 0.75, tipZ: 0.6, bend: -0.4 }), 8),
+    sweep: new RoundedBoxGeometry(1.2, 0.34, 0.26, 3, 0.12),
+    jacket: mat({
+      roughness: 0.4,
+      map: canvasTexture(128, 128, (ctx, w, h) => grain(ctx, w, h, JACKET, JACKET_LIGHT, 14)),
+    }),
+    // Open jacket: a white tee down the middle, zip edges, a belted hem.
+    front: decalMat(
+      canvasTexture(256, 220, (ctx, w, h) => {
+        const cx = w / 2
+        const tee = w * 0.24
+        ctx.fillStyle = TEE
+        ctx.fillRect(cx - tee / 2, 0, tee, h)
+        ctx.fillStyle = '#9a9aa4' // zips
+        ctx.fillRect(cx - tee / 2 - 5, 0, 4, h * 0.86)
+        ctx.fillRect(cx + tee / 2 + 1, 0, 4, h * 0.86)
+        ctx.fillStyle = JACKET_LIGHT // belted hem
+        ctx.fillRect(0, h * 0.86, cx - tee / 2, h * 0.1)
+        ctx.fillRect(cx + tee / 2, h * 0.86, cx - tee / 2, h * 0.1)
+      }),
+    ),
+    sleeve: new RoundedBoxGeometry(ARM[0] + 0.1, CUFF_H, ARM[2] + 0.1, 4, 0.3),
+    jeans: mat({
+      map: canvasTexture(64, 256, (ctx, w, h) => {
+        grain(ctx, w, h, '#55555d', '#66666f', 10)
+        ctx.fillStyle = 'rgba(255,255,255,0.12)'
+        ctx.fillRect(0, h * 0.5, w, h * 0.16)
+      }),
+    }),
+    boot: glossyShoe('#16161a'),
+    lens: new RoundedBoxGeometry(0.66, 0.42, 0.08, 3, 0.03),
+    bar: new RoundedBoxGeometry(1.5, 0.06, 0.06, 2, 0.02),
+    lensMat: mat({ color: '#15151a', roughness: 0.15, metalness: 0.4 }),
+    frameMat: mat({ color: '#d8b870', roughness: 0.3, metalness: 0.8 }),
+  }))
+
+  dressHead(bones, m.face)
+  const n = bones.neck1
+  const top = HEAD[1]
+  const front = HEAD[2] / 2
+  girlHair(n, m.hair, { sides: 'long', fringe: false, back: false })
+  const sweep = part(m.sweep, m.hair, 0.22, top - 0.2, front + 0.05)
+  sweep.rotation.z = -0.22
+  n.add(sweep)
+  // Long hair down the back, swinging with hairPhysics.js.
+  hairStrand(bones, n, m.hairBack, m.hair, 0, top + 0.08, -front - 0.18, -1, 0.98)
+
+  const eyeY = 0.97
+  const faceZ = front + 0.05
+  for (const s of [-1, 1]) {
+    const lens = part(m.lens, m.lensMat, s * 0.36, eyeY, faceZ)
+    lens.rotation.z = s * -0.08
+    n.add(lens)
+  }
+  n.add(part(m.bar, m.frameMat, 0, eyeY + 0.2, faceZ + 0.01))
+
+  bones.spine1.add(part(b.torso, m.jacket, 0, TORSO_Y, 0))
+  bones.spine1.add(decal(m.front, TORSO[0], TORSO[1] - 0.05, 0, TORSO_Y, TORSO[2] / 2 + 0.004))
+  for (const arm of bones.arms) {
+    arm.add(part(b.arm, b.skin, 0, ARM_Y, ARM_Z))
+    arm.add(part(m.sleeve, m.jacket, 0, -CUFF_H / 2 + 0.03, ARM_Z))
+  }
+  for (const [leg, side] of bones.legs) {
+    leg.add(part(b.leg, m.jeans, side * 0.1, LEG_Y, 0))
+    leg.add(part(b.shoe, m.boot, side * 0.1, SHOE_Y, 0.04))
+  }
+}
+
+// --- beard (girl): wavy auburn hair, gold hoops, polka-dot sundress --------
+const DRESS_TEAL = '#1f8f8a'
+
+function dressGirlBeard(bones) {
+  const b = base()
+  const m = cached('girlBeard', () => ({
+    face: decalMat(girlFaceTexture({ lips: '#c2415a', brows: true })),
+    hair: mat({ map: canvasTexture(128, 128, (ctx, w, h) => grain(ctx, w, h, '#9a5a2e', '#b8773f', 14)) }),
+    hairBack: skinStrand(hangingStrand(HEAD[0] + 0.26, 2.2, 0.38, { tipX: 0.85, tipZ: 0.6, bend: -0.3 }), 6),
+    hoop: new TorusGeometry(0.14, 0.03, 6, 18),
+    gold: mat({ color: '#e0b650', roughness: 0.25, metalness: 0.85 }),
+    dress: mat({
+      map: canvasTexture(128, 128, (ctx, w, h) => {
+        ctx.fillStyle = DRESS_TEAL
+        ctx.fillRect(0, 0, w, h)
+        ctx.fillStyle = '#f3fbf9'
+        for (let y = 0; y < 4; y++) {
+          for (let x = 0; x < 4; x++) {
+            ctx.beginPath()
+            ctx.arc((x + (y % 2) * 0.5) * 32 + 8, y * 32 + 16, 5, 0, Math.PI * 2)
+            ctx.fill()
+          }
+        }
+      }),
+    }),
+    // Sleeveless: a scoop neckline and a tan belt with a buckle.
+    front: decalMat(
+      canvasTexture(256, 220, (ctx, w, h) => {
+        const cx = w / 2
+        ctx.fillStyle = SKIN
+        ctx.beginPath()
+        ctx.ellipse(cx, 0, 70, 58, 0, 0, Math.PI)
+        ctx.fill()
+        ctx.fillStyle = '#c99a5b'
+        ctx.fillRect(0, h * 0.86, w, h * 0.08)
+        ctx.fillStyle = '#e0b650'
+        ctx.fillRect(cx - 12, h * 0.85, 24, h * 0.1)
+      }),
+    ),
+    skirt: skirtGeometry(1.5, SKIRT_TOP, [TORSO[0] + 0.7, TORSO[2] + 0.8]),
+    sandal: mat({
+      map: canvasTexture(64, 64, (ctx, w, h) => {
+        ctx.fillStyle = SKIN
+        ctx.fillRect(0, 0, w, h)
+        ctx.fillStyle = '#b07a44' // straps and sole
+        ctx.fillRect(0, h * 0.25, w, h * 0.12)
+        ctx.fillRect(0, h * 0.5, w, h * 0.12)
+        ctx.fillRect(0, h * 0.8, w, h * 0.2)
+      }),
+    }),
+  }))
+
+  dressHead(bones, m.face)
+  const n = bones.neck1
+  const top = HEAD[1]
+  const front = HEAD[2] / 2
+  girlHair(n, m.hair, { sides: 'long', back: false })
+  hairStrand(bones, n, m.hairBack, m.hair, 0, top + 0.06, -front - 0.18, -1, 0.98)
+  for (const s of [-1, 1]) {
+    const hoop = part(m.hoop, m.gold, s * (HEAD[0] / 2 + 0.24), 0.38, 0.35)
+    hoop.rotation.y = Math.PI / 2
+    n.add(hoop)
+  }
+
+  bones.spine1.add(part(b.torso, m.dress, 0, TORSO_Y, 0))
+  bones.spine1.add(decal(m.front, TORSO[0], TORSO[1] - 0.05, 0, TORSO_Y, TORSO[2] / 2 + 0.004))
+  skirt(bones, m.skirt, m.dress)
+  for (const arm of bones.arms) arm.add(part(b.arm, b.skin, 0, ARM_Y, ARM_Z))
+  for (const [leg, side] of bones.legs) {
+    leg.add(part(b.leg, b.skin, side * 0.1, LEG_Y, 0))
+    leg.add(part(b.shoe, m.sandal, side * 0.1, SHOE_Y, 0.04))
+  }
+}
+
+// --- grandpa (girl): grey bun, round glasses, lavender cardigan, pearls ----
+const LAVENDER = '#9c86c2'
+
+function dressGrandma(bones) {
+  const b = base()
+  const m = cached('grandma', () => ({
+    face: decalMat(girlFaceTexture({ lips: '#b5566c', blush: 'rgba(236,140,160,0.45)' })),
+    grey: mat({ map: canvasTexture(64, 64, (ctx, w, h) => grain(ctx, w, h, GREY, GREY_LIGHT, 10)) }),
+    bun: new SphereGeometry(0.46, 16, 12),
+    ring: new TorusGeometry(0.25, 0.035, 8, 24),
+    bridge: new RoundedBoxGeometry(0.26, 0.05, 0.05, 2, 0.02),
+    gold: mat({ color: '#c9a55a', roughness: 0.3, metalness: 0.8 }),
+    cardigan: mat({ map: canvasTexture(64, 128, (ctx, w, h) => grain(ctx, w, h, LAVENDER, '#ad99d0', 12)) }),
+    // Cardigan front: a white blouse V with pearls, buttons, a ribbed hem.
+    front: decalMat(
+      canvasTexture(256, 220, (ctx, w, h) => {
+        const cx = w / 2
+        ctx.fillStyle = SHIRT
+        ctx.beginPath()
+        ctx.moveTo(cx - w * 0.2, 0)
+        ctx.lineTo(cx, h * 0.55)
+        ctx.lineTo(cx + w * 0.2, 0)
+        ctx.closePath()
+        ctx.fill()
+        pearls(ctx, cx, w * 0.13, 6, 34)
+        ctx.strokeStyle = '#7d69a3'
+        ctx.lineWidth = 6
+        ctx.beginPath()
+        ctx.moveTo(cx - w * 0.2, 0)
+        ctx.lineTo(cx, h * 0.55)
+        ctx.lineTo(cx + w * 0.2, 0)
+        ctx.moveTo(cx, h * 0.55)
+        ctx.lineTo(cx, h)
+        ctx.stroke()
+        ctx.fillStyle = '#f3e9d2'
+        for (const y of [0.64, 0.76]) {
+          ctx.beginPath()
+          ctx.arc(cx + 14, h * y, 6, 0, Math.PI * 2)
+          ctx.fill()
+        }
+        ctx.fillStyle = '#836fae'
+        ctx.fillRect(0, h * 0.88, w, h * 0.12)
+        ctx.fillStyle = '#6f5c98'
+        for (let x = 0; x < w; x += 8) ctx.fillRect(x, h * 0.88, 3, h * 0.12)
+      }),
+    ),
+    sleeve: new RoundedBoxGeometry(ARM[0] + 0.1, CUFF_H, ARM[2] + 0.1, 4, 0.3),
+    skirt: skirtGeometry(2.0, SKIRT_TOP, [TORSO[0] + 0.5, TORSO[2] + 0.9]),
+    skirtMat: mat({ map: canvasTexture(64, 128, (ctx, w, h) => grain(ctx, w, h, '#5b3a5e', '#6a4870', 8)) }),
+    stocking: mat({ color: '#d9c9bd' }),
+    shoe: glossyShoe('#3b2a22'),
+  }))
+
+  dressHead(bones, m.face)
+  const n = bones.neck1
+  const top = HEAD[1]
+  const front = HEAD[2] / 2
+  girlHair(n, m.grey)
+  n.add(part(m.bun, m.grey, 0, top + 0.28, -0.2))
+
+  // Round glasses over the face decal's eyes.
+  const eyeY = 0.95
+  for (const s of [-1, 1]) n.add(part(m.ring, m.gold, s * 0.39, eyeY, front + 0.06))
+  n.add(part(m.bridge, m.gold, 0, eyeY + 0.05, front + 0.06))
+
+  bones.spine1.add(part(b.torso, m.cardigan, 0, TORSO_Y, 0))
+  bones.spine1.add(decal(m.front, TORSO[0], TORSO[1] - 0.05, 0, TORSO_Y, TORSO[2] / 2 + 0.004))
+  skirt(bones, m.skirt, m.skirtMat)
+  for (const arm of bones.arms) {
+    arm.add(part(b.arm, b.skin, 0, ARM_Y, ARM_Z))
+    arm.add(part(m.sleeve, m.cardigan, 0, -CUFF_H / 2 + 0.03, ARM_Z))
+  }
+  for (const [leg, side] of bones.legs) {
+    leg.add(part(b.leg, m.stocking, side * 0.1, LEG_Y, 0))
+    leg.add(part(b.shoe, m.shoe, side * 0.1, SHOE_Y, 0.04))
+  }
+}
+
+// --- elder (girl): floor-length white hair, plaid dress to the ankles ------
+function dressGirlElder(bones) {
+  const b = base()
+  const m = cached('girlElder', () => ({
+    face: decalMat(girlFaceTexture({ blush: 'rgba(236,150,165,0.4)' })),
+    white: mat({ map: canvasTexture(64, 128, (ctx, w, h) => grain(ctx, w, h, WHITE_HAIR, WHITE_HAIR_STREAK, 12)) }),
+    // Hair falls down the back and curls away behind, like the elder's.
+    hairBack: skinStrand(hangingStrand(HEAD[0] + 0.24, 6.1, 0.42, { tipX: 0.5, tipZ: 0.6, bend: -0.9 }), 10),
+    dress: mat({ map: canvasTexture(128, 128, (ctx, w, h) => plaid(ctx, w, h, '#6b2a35', '#4a1b24', '#a4596a', 32)) }),
+    // Lace collar over the plaid.
+    collar: decalMat(
+      canvasTexture(256, 128, (ctx, w, h) => {
+        ctx.fillStyle = '#f8f5fb'
+        ctx.beginPath()
+        ctx.ellipse(w / 2, 0, w * 0.34, h * 0.7, 0, 0, Math.PI)
+        ctx.fill()
+        ctx.fillStyle = SKIN
+        ctx.beginPath()
+        ctx.ellipse(w / 2, 0, w * 0.2, h * 0.38, 0, 0, Math.PI)
+        ctx.fill()
+        ctx.fillStyle = '#e2b865' // brooch
+        ctx.beginPath()
+        ctx.arc(w / 2, h * 0.55, 8, 0, Math.PI * 2)
+        ctx.fill()
+      }),
+    ),
+    sleeve: new RoundedBoxGeometry(ARM[0] + 0.08, CUFF_H, ARM[2] + 0.08, 4, 0.3),
+    skirt: skirtGeometry(2.35, SKIRT_TOP, [TORSO[0] + 0.6, TORSO[2] + 1.1]),
+    stocking: mat({ color: '#3a2a2e' }),
+    shoe: glossyShoe('#3a2416'),
+  }))
+
+  dressHead(bones, m.face)
+  const n = bones.neck1
+  const top = HEAD[1]
+  const front = HEAD[2] / 2
+  girlHair(n, m.white, { sides: 'long', back: false })
+  hairStrand(bones, n, m.hairBack, m.white, 0, top + 0.1, -front - 0.18, -1, 0.98)
+
+  bones.spine1.add(part(b.torso, m.dress, 0, TORSO_Y, 0))
+  bones.spine1.add(decal(m.collar, 1.5, 0.7, 0, TORSO[1] - 0.35, TORSO[2] / 2 + 0.004))
+  skirt(bones, m.skirt, m.dress)
+  for (const arm of bones.arms) {
+    arm.add(part(b.arm, b.skin, 0, ARM_Y, ARM_Z))
+    arm.add(part(m.sleeve, m.dress, 0, -CUFF_H / 2 + 0.03, ARM_Z))
+  }
+  for (const [leg, side] of bones.legs) {
+    leg.add(part(b.leg, m.stocking, side * 0.1, LEG_Y, 0))
+    leg.add(part(b.shoe, m.shoe, side * 0.1, SHOE_Y, 0.04))
+  }
+}
+
+// --- viking (girl): shieldmaiden — horned helmet, blonde braids, mail skirt
+function dressShieldmaiden(bones) {
+  const b = base()
+  const v = vikingShared()
+  const m = cached('shieldmaiden', () => ({
+    face: decalMat(girlFaceTexture({ brows: true })),
+    hair: mat({ color: BLONDE }),
+    braidMat: mat({
+      map: canvasTexture(64, 128, (ctx, w, h) => {
+        ctx.fillStyle = BLONDE
+        ctx.fillRect(0, 0, w, h)
+        ctx.strokeStyle = '#b98d3f' // plaited chevrons
+        ctx.lineWidth = 3
+        ctx.beginPath()
+        for (let y = -8; y < h + 16; y += 16) {
+          ctx.moveTo(0, y)
+          ctx.lineTo(w / 2, y + 10)
+          ctx.lineTo(w, y)
+        }
+        ctx.stroke()
+      }),
+    }),
+    braid: skinStrand(hangingStrand(0.36, 2.6, 0.32, { tipX: 0.6, tipZ: 0.6, bend: 0.1 }), 6),
+    mailSkirt: skirtGeometry(1.3, SKIRT_TOP, [TORSO[0] + 0.5, TORSO[2] + 0.6]),
+  }))
+
+  dressHead(bones, m.face)
+  const n = bones.neck1
+  const top = HEAD[1]
+  const front = HEAD[2] / 2
+  girlHair(n, m.hair, { fringe: false })
+
+  const dome = part(v.dome, v.helmet, 0, top - 0.3, 0)
+  dome.scale.set(HELM_R, 0.78, HELM_R)
+  n.add(dome)
+  n.add(part(v.rim, v.rimMat, 0, top - 0.3, 0))
+  n.add(part(v.crest, v.rimMat, 0, top + 0.43, 0))
+  n.add(part(v.hornL, v.hornMat, HELM_R - 0.1, top - 0.1, 0))
+  n.add(part(v.hornR, v.hornMat, -HELM_R + 0.1, top - 0.1, 0))
+
+  // Two braids hanging over the chest, swinging with hairPhysics.js.
+  for (const s of [-1, 1]) hairStrand(bones, n, m.braid, m.braidMat, s * 0.98, 0.95, front + 0.16, 1, 0.96)
+
+  bones.spine1.add(part(b.torso, v.mail, 0, TORSO_Y, 0))
+  bones.spine1.add(decal(v.mailFront, TORSO[0], TORSO[1] - 0.05, 0, TORSO_Y, TORSO[2] / 2 + 0.004))
+  skirt(bones, m.mailSkirt, v.mail)
+  for (const arm of bones.arms) {
+    arm.add(part(b.arm, b.skin, 0, ARM_Y, ARM_Z))
+    arm.add(part(v.mailSleeve, v.mail, 0, -0.57, ARM_Z))
+    arm.add(part(v.bracer, v.bracerMat, 0, -1.5, ARM_Z))
+  }
+  for (const [leg, side] of bones.legs) {
+    leg.add(part(b.leg, v.legs, side * 0.1, LEG_Y, 0))
+    leg.add(part(b.shoe, v.boot, side * 0.1, SHOE_Y, 0.04))
+  }
+}
+
+// --- skeleton (girl): the same bones, with a pink bow and lashes -----------
+function dressGirlSkeleton(bones) {
+  dressSkeleton(bones)
+  const m = cached('girlSkeleton', () => ({
+    bow: mat({ color: PINK }),
+    lash: new RoundedBoxGeometry(0.035, 0.14, 0.035, 2, 0.015),
+    ink: mat({ color: SOCKET, roughness: 0.9 }),
+  }))
+  const n = bones.neck1
+  n.add(bow(m.bow, 0.32, 1.55, 0.1, 0.9, -0.35))
+  // Lashes round the outer top of each eye socket (see dressSkeleton).
+  for (const s of [-1, 1]) {
+    for (const a of [0.45, 0.85, 1.25]) {
+      const dx = s * Math.cos(a)
+      const dy = Math.sin(a)
+      const lash = part(m.lash, m.ink, s * 0.25 + dx * 0.24, 0.84 + dy * 0.22, 0.5)
+      lash.rotation.z = -s * (Math.PI / 2 - a)
+      n.add(lash)
+    }
+  }
+}
+
+// --- ghost (girl): the same ghost, with lashes, blush and a bow ------------
+function dressGirlGhost(bones) {
+  dressGhost(bones)
+  const m = cached('girlGhost', () => ({
+    bow: mat({ color: PINK }),
+    lashes: decalMat(
+      canvasTexture(256, 256, (ctx) => {
+        ctx.fillStyle = 'rgba(240,130,160,0.6)'
+        for (const x of [66, 192]) {
+          ctx.beginPath()
+          ctx.ellipse(x, 132, 18, 10, 0, 0, Math.PI * 2)
+          ctx.fill()
+        }
+        ctx.strokeStyle = GHOST_INK
+        ctx.lineWidth = 6
+        ctx.lineCap = 'round'
+        for (const [x, s] of [[98, -1], [160, 1]]) {
+          for (const a of [0.3, 0.7, 1.1]) {
+            const dx = s * Math.cos(a)
+            const dy = -Math.sin(a)
+            ctx.beginPath()
+            ctx.moveTo(x + dx * 25, 100 + dy * 22)
+            ctx.lineTo(x + dx * 37, 100 + dy * 33)
+            ctx.stroke()
+          }
+        }
+      }),
+    ),
+  }))
+  const n = bones.neck1
+  n.add(decal(m.lashes, HEAD[0], HEAD[1], 0, HEAD_Y, HEAD[2] / 2 + 0.006))
+  n.add(bow(m.bow, 0.4, HEAD[1] + 0.05, 0.2, 1.1, -0.3))
+}
+
 const OUTFITS = {
   plain: dressPlain,
   striped: dressStriped,
@@ -1441,15 +2172,34 @@ export function outfitForLevel(level) {
   return LEVEL_OUTFITS[Math.max(0, Math.min(n, LEVEL_OUTFITS.length - 1))]
 }
 
+// The girl counterpart of each boy outfit, keyed by the same id — so
+// outfitForLevel() serves both, and a girl at any Age level wears the girl
+// version of that level's look.
+const GIRL_OUTFITS = {
+  plain: dressGirlPlain,
+  striped: dressGirlStriped,
+  suit: dressGirlSuit,
+  shades: dressGirlShades,
+  beard: dressGirlBeard,
+  grandpa: dressGrandma,
+  elder: dressGirlElder,
+  viking: dressShieldmaiden,
+  skeleton: dressGirlSkeleton,
+  ghost: dressGirlGhost,
+}
+
 // Returns a Group shaped like assembleAvatar()'s result: `nodes` (name ->
 // node) and `animations` (none — avatarAnim.js falls back to its generated
 // gait) stashed on the root, already scaled from rig units to game metres.
-// An unknown outfit id falls back to DEFAULT_OUTFIT.
-export function buildDefaultCharacter(outfit = DEFAULT_OUTFIT) {
+// An unknown outfit id falls back to DEFAULT_OUTFIT. gender ('boy' | 'girl',
+// default boy) picks OUTFITS or GIRL_OUTFITS.
+export function buildDefaultCharacter(outfit = DEFAULT_OUTFIT, gender = 'boy') {
   const root = new Group()
   root.name = 'character'
   const bones = buildRig(root)
-  ;(OUTFITS[outfit] || OUTFITS[DEFAULT_OUTFIT])(bones)
+  const id = OUTFITS[outfit] ? outfit : DEFAULT_OUTFIT
+  const dress = (gender === 'girl' ? GIRL_OUTFITS : OUTFITS)[id]
+  dress(bones)
 
   root.animations = []
   root.nodes = {}

@@ -7,7 +7,8 @@ import { canAcceptRebirth, rebirthRequirement } from '../../data/progression.js'
 import { SHOP_ITEMS } from '../../data/shop.js'
 import { formatCompact } from '../../systems/format.js'
 import { resetPlayer } from '../../systems/playerState.js'
-import { SPAWN, ISLAND_SCALE } from '../../data/world.js'
+import { syncYawToPlayer } from '../../systems/cameraOrbit.js'
+import { SPAWN, SPAWN_FACING, ISLAND_SCALE } from '../../data/world.js'
 import { OBBY, AGE_MACHINES } from '../../data/island.js'
 import { AGE_BOOST_MULTIPLIER } from '../../data/luckyWheel.js'
 import { AGE_MACHINE_RADIUS } from '../../systems/ageMachineCollision.js'
@@ -25,6 +26,7 @@ import ActionPopups from './ActionPopups.jsx'
 import BonusTimer from './BonusTimer.jsx'
 import InteractPrompt from './InteractPrompt.jsx'
 import LuckyWheel from './LuckyWheel.jsx'
+import GenderPicker from './GenderPicker.jsx'
 import { actionResultState } from '../../systems/actionResult.js'
 import { useSettings, useTouchMode } from './hooks.js'
 
@@ -424,7 +426,8 @@ function LeftCenterControls() {
 
   const goToSpawn = () => {
     useGameStore.getState().setScene('island')
-    resetPlayer(SPAWN)
+    resetPlayer(SPAWN, SPAWN_FACING)
+    syncYawToPlayer()
   }
 
   const rowClassName = `flex items-center ${isTouch ? 'gap-1.5' : 'flex-wrap justify-center gap-2'}`
@@ -604,6 +607,10 @@ export default function Hud() {
       {/* Lucky Wheel popup — opened with E at the Statue (see
          systems/statueInteract.js). Portals itself to document.body. */}
       <LuckyWheel />
+
+      {/* Start-of-session "Pick your gender!" window over a blurred game.
+         Portals itself to document.body and renders nothing once chosen. */}
+      <GenderPicker />
 
       {/* Full-screen "rotate to landscape" gate for touch sessions. Last
          child + highest z-index so it covers the touch controls while up. */}

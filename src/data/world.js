@@ -24,6 +24,11 @@ export const GROUND_DEPTH = ISLAND_DEPTH * ISLAND_SCALE
 
 export const SPAWN = { x: 0, y: GROUND_Y, z: -9 * ISLAND_SCALE }
 
+// Yaw the player (and the camera, via syncYawToPlayer) faces on an island
+// spawn: 0 looks south (+Z) across the plaza; Math.PI would look north at
+// the Age Machines.
+export const SPAWN_FACING = 0
+
 // Walking off the island's grass edge means falling through open air and
 // into the water below — once the player has sunk this far under the
 // surface, playerMovement.js counts them as drowned and respawns them,

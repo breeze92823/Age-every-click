@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { DoubleSide, ExtrudeGeometry, MeshStandardMaterial, Path, Shape, ShapeGeometry, SphereGeometry, Vector2 } from 'three'
+import { Color, DoubleSide, ExtrudeGeometry, MeshStandardMaterial, Object3D, Path, Shape, ShapeGeometry, SphereGeometry, Vector2 } from 'three'
 import { MATERIAL_PBR } from '../data/materials.js'
 import { GROUND_Y, ISLAND_SCALE } from '../data/world.js'
 import { AGE_MACHINES_TOP_Y } from '../systems/terrainHeight.js'
@@ -67,8 +67,9 @@ function Box({ size, position, rotation, color, cast = true, ...mat }) {
 }
 
 // World-sized billboard text that always faces the camera.
-function Label({ text, color, position, height = 0.8 }) {
-  const { texture, aspect } = useMemo(() => makeLabelTexture(text, { color }), [text, color])
+// `gradient` should be a stable (module-level) array so the memo holds.
+function Label({ text, color, position, height = 0.8, gradient }) {
+  const { texture, aspect } = useMemo(() => makeLabelTexture(text, { color, gradient }), [text, color, gradient])
   useEffect(() => () => texture.dispose(), [texture])
   return (
     <sprite position={position} scale={[height * aspect, height, 1]}>
@@ -596,24 +597,191 @@ function Pets() {
   )
 }
 
+// Obby pad miniatures: each pad is a studded grey brick base (the 2.4x2.4
+// footprint landmarkCollision.js blocks) topped with a toy-sized preview of
+// the scene it leads to. Models run along local Z so they read left-to-right
+// for a player approaching from -X along the chevron path.
+const PAD_SIZE = 2.4
+const PAD_H = 0.5
+const PAD_BASE = '#d8dbe1'
+const STUD_R = 0.085
+const STUD_H = 0.06
+const RAINBOW = ['#ff3b3b', '#ff8a2b', '#ffd23d', '#5fe35a', '#35d0ff', '#3d6bff', '#a24cf0']
+
+// Centered offsets for `n` studs `spacing` apart.
+const studRow = (n, spacing) => Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * spacing)
+
+// Studs on the top face of a box centered at (cx, cz) whose top is at `y`.
+function topStuds(cx, cz, nx, nz, spacing, y, c) {
+  const out = []
+  for (const dx of studRow(nx, spacing)) for (const dz of studRow(nz, spacing)) out.push({ p: [cx + dx, y + STUD_H / 2, cz + dz], c })
+  return out
+}
+
+// One row of studs around the four sides of the pad base, Roblox-brick style.
+function baseSideStuds() {
+  const out = []
+  const e = PAD_SIZE / 2 + STUD_H / 2
+  const y = PAD_H / 2
+  for (const t of studRow(5, 0.44)) {
+    out.push({ p: [e, y, t], r: [0, 0, Math.PI / 2], c: PAD_BASE })
+    out.push({ p: [-e, y, t], r: [0, 0, Math.PI / 2], c: PAD_BASE })
+    out.push({ p: [t, y, e], r: [Math.PI / 2, 0, 0], c: PAD_BASE })
+    out.push({ p: [t, y, -e], r: [Math.PI / 2, 0, 0], c: PAD_BASE })
+  }
+  return out
+}
+
+const _studObj = new Object3D()
+const _studColor = new Color()
+
+// All of one model's studs as a single instanced draw, colored per stud.
+function Studs({ studs }) {
+  const ref = useRef()
+  useLayoutEffect(() => {
+    const mesh = ref.current
+    studs.forEach(({ p, r = [0, 0, 0], c }, i) => {
+      _studObj.position.set(...p)
+      _studObj.rotation.set(...r)
+      _studObj.updateMatrix()
+      mesh.setMatrixAt(i, _studObj.matrix)
+      mesh.setColorAt(i, _studColor.set(c))
+    })
+    mesh.instanceMatrix.needsUpdate = true
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+  }, [studs])
+  return (
+    <instancedMesh ref={ref} args={[undefined, undefined, studs.length]} castShadow receiveShadow>
+      <cylinderGeometry args={[STUD_R, STUD_R, STUD_H, 12]} />
+      <Mat color="#ffffff" />
+    </instancedMesh>
+  )
+}
+
+// Tsunami Escape: grass-on-dirt island slab with a cyan wave curling over it.
+const TSUNAMI_TOP = PAD_H + 0.22 + 0.1
+const TSUNAMI_STUDS = baseSideStuds()
+
+function makeWaveGeometry() {
+  const s = new Shape()
+  s.moveTo(-0.75, 0)
+  s.lineTo(0.55, 0)
+  s.quadraticCurveTo(0.75, 0.7, 0.45, 1.25) // back of the wave up to the crest
+  s.quadraticCurveTo(0.3, 1.22, 0.24, 1.06) // lip curling forward
+  s.quadraticCurveTo(0.35, 0.35, -0.75, 0) // concave face down to the trough
+  const g = new ExtrudeGeometry(s, { depth: 0.6, curveSegments: 16, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 2 })
+  g.translate(0, 0, -0.3)
+  return g
+}
+
+function TsunamiEscapeModel() {
+  const wave = useMemo(makeWaveGeometry, [])
+  useEffect(() => () => wave.dispose(), [wave])
+  return (
+    <>
+      <Box size={[2.2, 0.22, 2.2]} position={[0, PAD_H + 0.11, 0]} color="#c9703d" />
+      <Box size={[2.2, 0.1, 2.2]} position={[0, PAD_H + 0.27, 0]} color="#6fdc3c" />
+      <mesh geometry={wave} position={[0, TSUNAMI_TOP, 0]} rotation-y={-Math.PI / 2 + 0.45} castShadow receiveShadow>
+        <Mat color="#35d0ff" emissive="#1a8fd0" emissiveIntensity={0.35} transparent opacity={0.92} />
+      </mesh>
+      <Studs studs={TSUNAMI_STUDS} />
+    </>
+  )
+}
+
+// Stud Jumps: a rainbow staircase of studded brick columns rising along Z.
+const STAIR_W = 0.27
+const STAIR_STEP = 0.2
+const STAIR_DEPTH = 0.54
+
+const STUD_JUMPS_STUDS = [
+  ...baseSideStuds(),
+  ...RAINBOW.flatMap((c, i) => topStuds(0, (i - (RAINBOW.length - 1) / 2) * STAIR_W, 2, 1, STAIR_W, PAD_H + (i + 1) * STAIR_STEP, c)),
+]
+
+function StudJumpsModel() {
+  return (
+    <>
+      {RAINBOW.map((c, i) => {
+        const h = (i + 1) * STAIR_STEP
+        return <Box key={c} size={[STAIR_DEPTH, h, STAIR_W]} position={[0, PAD_H + h / 2, (i - (RAINBOW.length - 1) / 2) * STAIR_W]} color={c} />
+      })}
+      <Studs studs={STUD_JUMPS_STUDS} />
+    </>
+  )
+}
+
+// Impossible Bridge: two green brick towers over a dark gap, joined by a
+// two-lane bridge of alternating magenta/white glass tiles.
+const BRIDGE_TOWER = 0.6
+const BRIDGE_TOWER_Z = 0.8
+const BRIDGE_Y = PAD_H + BRIDGE_TOWER
+const BRIDGE_LEN = 2 * BRIDGE_TOWER_Z - BRIDGE_TOWER
+const BRIDGE_ROWS = 4
+
+const IMPOSSIBLE_BRIDGE_STUDS = [
+  ...baseSideStuds(),
+  ...[-BRIDGE_TOWER_Z, BRIDGE_TOWER_Z].flatMap((z) => topStuds(0, z, 2, 2, 0.28, BRIDGE_Y, '#62d63a')),
+]
+
+function ImpossibleBridgeModel() {
+  const tileLen = BRIDGE_LEN / BRIDGE_ROWS
+  return (
+    <>
+      <Box size={[2.2, 0.06, 2.2]} position={[0, PAD_H + 0.03, 0]} color="#2b3544" cast={false} />
+      {[-BRIDGE_TOWER_Z, BRIDGE_TOWER_Z].map((z) => (
+        <Box key={z} size={[BRIDGE_TOWER, BRIDGE_TOWER, BRIDGE_TOWER]} position={[0, PAD_H + BRIDGE_TOWER / 2, z]} color="#62d63a" />
+      ))}
+      {[-0.3, 0.3].map((x) => (
+        <Box key={x} size={[0.04, 0.06, BRIDGE_LEN]} position={[x, BRIDGE_Y - 0.03, 0]} color="#ffffff" />
+      ))}
+      {[-0.14, 0.14].flatMap((x, col) =>
+        Array.from({ length: BRIDGE_ROWS }, (_, row) => (
+          <Box
+            key={`${col}-${row}`}
+            size={[0.26, 0.04, tileLen - 0.03]}
+            position={[x, BRIDGE_Y - 0.03, (row - (BRIDGE_ROWS - 1) / 2) * tileLen]}
+            color={(col + row) % 2 ? '#e04cf0' : '#f7e8ff'}
+            transparent
+            opacity={0.88}
+          />
+        )),
+      )}
+      <Studs studs={IMPOSSIBLE_BRIDGE_STUDS} />
+    </>
+  )
+}
+
+// Keyed by data/island.js's OBBY.pads names, so each model always sits on
+// (and under the label of) the pad whose scene it previews.
+const PAD_MODELS = {
+  'Impossible Bridge': ImpossibleBridgeModel,
+  'Stud Jumps': StudJumpsModel,
+  'Tsunami Escape': TsunamiEscapeModel,
+}
+const PAD_TITLE_GRADIENT = { 'Stud Jumps': RAINBOW }
+
 function Obby() {
   const arrows = useMemo(() => makeChevronTexture({ color: '#5fe35a', count: 3 }), [])
   useEffect(() => () => arrows.dispose(), [arrows])
   return (
     <group position={[OBBY.x, GROUND_Y, 0]}>
-      <Label text="OBBY" color="#ffd23d" position={[0, 4.4, OBBY.signZ]} height={1.6} />
-      {OBBY.pads.map(({ z, name, color, minCoins }) => (
-        <group key={name} position-z={z}>
-          <Box size={[2.4, 0.5, 2.4]} position={[0, 0.25, 0]} color="#d8dbe1" />
-          <Box size={[2, 0.08, 2]} position={[0, 0.54, 0]} color={color} cast={false} />
-          <Label text={`+🪙${minCoins} min`} color="#ffd23d" position={[0, 2.15, 0]} height={0.4} />
-          <Label text={name} color={color} position={[0, 1.7, 0]} height={0.55} />
-          <mesh position={[-3.8, 0.035, 0]} rotation-x={-Math.PI / 2}>
-            <planeGeometry args={[3.6, 1.2]} />
-            <meshStandardMaterial map={arrows} transparent depthWrite={false} {...MATERIAL_PBR.PATH} />
-          </mesh>
-        </group>
-      ))}
+      <Label text="OBBY" color="#ffd23d" position={[0, 4.4, OBBY.signZ+5]} height={1.6} />
+      {OBBY.pads.map(({ z, name, color, minCoins }) => {
+        const Model = PAD_MODELS[name]
+        return (
+          <group key={name} position-z={z}>
+            <Box size={[PAD_SIZE, PAD_H, PAD_SIZE]} position={[0, PAD_H / 2, 0]} color={PAD_BASE} />
+            {Model && <Model />}
+            <Label text={`+🪙${minCoins} min`} color="#ffd23d" position={[0, 3.05, 0]} height={0.4} />
+            <Label text={name} color={color} gradient={PAD_TITLE_GRADIENT[name]} position={[0, 2.6, 0]} height={0.55} />
+            <mesh position={[-3.8, 0.035, 0]} rotation-x={-Math.PI / 2}>
+              <planeGeometry args={[3.6, 1.2]} />
+              <meshStandardMaterial map={arrows} transparent depthWrite={false} {...MATERIAL_PBR.PATH} />
+            </mesh>
+          </group>
+        )
+      })}
     </group>
   )
 }

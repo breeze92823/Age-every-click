@@ -8,10 +8,10 @@
 // loading (this template's Player.jsx is a plain capsule, not driven by a
 // loaded avatar) and Bux balance display specifics that don't matter here.
 import { GAME_SLUG, SETTINGS, DEV_MODE } from '../data/bloxity.js'
-import { setSensitivity } from './cameraOrbit.js'
+import { setSensitivity, syncYawToPlayer } from './cameraOrbit.js'
 import { settings, setSetting, subscribe as subscribeSettings } from './settingsState.js'
 import { resetPlayer } from './playerState.js'
-import { SPAWN } from '../data/world.js'
+import { SPAWN, SPAWN_FACING } from '../data/world.js'
 import * as session from './session.js'
 import * as audio from './audio.js'
 import * as sfx from './sfx.js'
@@ -192,7 +192,10 @@ export function init() {
     // to something real here.
     unsubscribers.push(
       SDK.player.onEvent((event) => {
-        if (event === 'respawn_request') resetPlayer(SPAWN)
+        if (event === 'respawn_request') {
+          resetPlayer(SPAWN, SPAWN_FACING)
+          syncYawToPlayer()
+        }
       }),
     )
 

@@ -6,13 +6,13 @@ import { install as installInput } from './systems/input.js'
 import { install as installClickGain } from './systems/clickGain.js'
 import { resetPlayer } from './systems/playerState.js'
 import { syncYawToPlayer as syncCameraYaw } from './systems/cameraOrbit.js'
-import { SPAWN } from './data/world.js'
+import { SPAWN, SPAWN_FACING } from './data/world.js'
 import { init as initBloxity, teardown as teardownBloxity } from './systems/bloxity.js'
 import { install as installPersistence } from './systems/persistence.js'
 import { init as initNet, teardown as teardownNet } from './systems/net.js'
 import { useGameStore } from './store/useGameStore.js'
 
-resetPlayer(SPAWN)
+resetPlayer(SPAWN, SPAWN_FACING)
 syncCameraYaw()
 installInput()
 installClickGain()

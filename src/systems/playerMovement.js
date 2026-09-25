@@ -2,7 +2,7 @@ import { inputState } from './input.js'
 import { player, resetPlayer } from './playerState.js'
 import { getYaw } from './cameraOrbit.js'
 import { PLAYER_MOVE_SPEED } from '../data/progression.js'
-import { SPAWN, WATER_DEATH_Y } from '../data/world.js'
+import { SPAWN, SPAWN_FACING, WATER_DEATH_Y } from '../data/world.js'
 import { terrainHeightAt } from './terrainHeight.js'
 import { conveyorPushAt } from './conveyor.js'
 import { resolveAgeMachineCollision } from './ageMachineCollision.js'
@@ -59,9 +59,9 @@ export function step(dt) {
   // rather than letting resolveAgeMachineCollision immediately push them
   // back out of the pedestal they were just teleported into.
   // The Lucky Wheel popup (opened with E at the Statue) freezes the player
-  // the same way.
-  const { ridingAgeMachine, wheelOpen } = useGameStore.getState()
-  if (ridingAgeMachine != null || wheelOpen) {
+  // the same way, as does the start-of-session gender picker.
+  const { ridingAgeMachine, wheelOpen, gender } = useGameStore.getState()
+  if (ridingAgeMachine != null || wheelOpen || gender == null) {
     syncStatueInteractHeld(inputState.interactHeld)
     player.velocity.x = 0
     player.velocity.y = 0
@@ -176,7 +176,7 @@ export function step(dt) {
   // voids.
   if (onIsland && p.y < WATER_DEATH_Y) {
     playActionFail()
-    resetPlayer(SPAWN)
+    resetPlayer(SPAWN, SPAWN_FACING)
     syncYawToPlayer()
     return
   }

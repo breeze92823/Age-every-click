@@ -52,3 +52,21 @@ export const REBIRTH_LEVEL_BAR_TOUCH_SCALE = 0.6
 
 // "Age: N" heading above the bar.
 export const LEVEL_BAR_TITLE_FONT_PX = 44
+
+// Touch/mobile layout for the main bar (LevelBar.jsx). Rendered at scale 1
+// with its own px sizes instead of shrinking the desktop bar via
+// LEVEL_BAR_SCALE, so the text stays legible and fits narrow phones. Font
+// sizes are CSS clamp() so they also shrink on very narrow viewports. The
+// whole block must stay above the touch HUD's side stacks (Hud.jsx top-24).
+export const LEVEL_BAR_TOUCH = {
+  top: 8,
+  width: 'min(420px, 72vw)',
+  height: 30,
+  border: 2,
+  textStroke: 1.5,
+  titleFont: 'clamp(20px, 6.5vw, 28px)',
+  labelFont: 'clamp(11px, 3.6vw, 15px)',
+  rebirthFont: 'clamp(12px, 3.8vw, 16px)',
+  titleGap: 4,
+  labelPadding: '0 10px',
+}

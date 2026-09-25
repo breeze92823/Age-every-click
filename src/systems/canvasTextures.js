@@ -18,7 +18,9 @@ function roundedRectPath(g, x, y, w, h, r) {
 
 // Bold outlined billboard text, Roblox-sign style. Returns the texture plus
 // its width/height ratio so a sprite can be scaled without distortion.
-export function makeLabelTexture(text, { color = '#ffffff', stroke = '#1b1b1f', px = 96 } = {}) {
+// `gradient` (optional array of CSS colors) fills the text with a left-to-right
+// linear gradient across its width instead of the flat `color`.
+export function makeLabelTexture(text, { color = '#ffffff', stroke = '#1b1b1f', px = 96, gradient = null } = {}) {
   const canvas = document.createElement('canvas')
   const g = canvas.getContext('2d')
   const font = `900 ${px}px ${LABEL_FONT}`
@@ -37,7 +39,13 @@ export function makeLabelTexture(text, { color = '#ffffff', stroke = '#1b1b1f', 
   g.lineWidth = px * 0.2
   g.strokeStyle = stroke
   g.strokeText(text, w / 2, h / 2)
-  g.fillStyle = color
+  if (gradient) {
+    const fill = g.createLinearGradient(pad, 0, w - pad, 0)
+    gradient.forEach((c, i) => fill.addColorStop(i / Math.max(1, gradient.length - 1), c))
+    g.fillStyle = fill
+  } else {
+    g.fillStyle = color
+  }
   g.fillText(text, w / 2, h / 2)
 
   const texture = new THREE.CanvasTexture(canvas)
