@@ -19,6 +19,7 @@ import { HEX_SPEED_PAD_TIERS } from '../data/hexPowerPad.js'
 import { AURA_TIERS, auraStrengthMultiplier } from '../data/aura.js'
 import { SHOP_ITEMS } from '../data/shop.js'
 import { AGE_MACHINES } from '../data/island.js'
+import { readLocalFreeSpinReadyAt } from '../systems/freeSpin.js'
 import {
   WHEEL_PRIZES,
   SPINS_INITIAL,
@@ -83,6 +84,13 @@ export const useGameStore = create((set, get) => ({
   // playerMovement.js freezes the player.
   spins: SPINS_INITIAL,
   speedCoil: false,
+  // How many spins this account has ever done. 0 means the next one is its
+  // very first, which rolls the friendlier WHEEL_PRIZES firstWeight table.
+  wheelSpins: 0,
+  // Client-clock epoch ms when the next free daily spin can be claimed (0 =
+  // available now). Durable on the backend for a signed-in player; see
+  // requestFreeSpin in systems/net.js.
+  freeSpinReadyAt: readLocalFreeSpinReadyAt(),
   wheelOpen: false,
   ageBoostUntil: 0,
 
@@ -103,18 +111,35 @@ export const useGameStore = create((set, get) => ({
     return true
   },
 
+  // Applies a successful free-spin claim. nextInMs is a duration (not a
+  // timestamp) so a wrong client clock can't shift the cooldown.
+  grantFreeSpin(nextInMs) {
+    set((s) => ({ spins: Math.min(s.spins + 1, SPINS_MAX), freeSpinReadyAt: Date.now() + nextInMs }))
+  },
+
+  // A refused claim: just learn how long is really left.
+  setFreeSpinCooldown(nextInMs) {
+    set({ freeSpinReadyAt: Date.now() + nextInMs })
+  },
+
   // Spends one spin and rolls the prize against the slices' weights. Returns
   // the WHEEL_PRIZES index, or -1 with no spin left. The prize is NOT applied
   // here — the wheel calls claimWheelPrize once its spin animation lands.
   // The Speed Coil slice only counts while the player has more than
   // SPEED_COIL_MIN_REBIRTH_EXCLUSIVE Rebirths and doesn't own it yet; until
-  // then its weight is 0, so the other slices' odds just renormalise.
+  // then its weight is 0, so the other slices' odds just renormalise. An
+  // account's very first spin uses each prize's firstWeight instead (no No
+  // Luck, no coil, mostly 200 Age).
   spinWheel() {
     const state = get()
     if (state.spins < 1) return -1
-    set((s) => ({ spins: s.spins - 1 }))
+    set((s) => ({ spins: s.spins - 1, wheelSpins: s.wheelSpins + 1 }))
     const coilEligible = state.rebirth > SPEED_COIL_MIN_REBIRTH_EXCLUSIVE && !state.speedCoil
-    const weights = WHEEL_PRIZES.map((p) => (p.kind === 'speedCoil' && !coilEligible ? 0 : p.weight))
+    const first = state.wheelSpins === 0
+    const weights = WHEEL_PRIZES.map((p) => {
+      if (p.kind === 'speedCoil' && !coilEligible) return 0
+      return first ? p.firstWeight : p.weight
+    })
     let roll = Math.random() * weights.reduce((sum, w) => sum + w, 0)
     for (let i = 0; i < weights.length; i++) {
       roll -= weights[i]
@@ -140,6 +165,8 @@ export const useGameStore = create((set, get) => ({
       case 'speedCoil':
         set({ speedCoil: true })
         return `You won x${SPEED_COIL_GAIN_MULTIPLIER} Click Gain forever!`
+      case 'noLuck':
+        return 'No luck this time!'
       default:
         return ''
     }
@@ -307,6 +334,8 @@ export const useGameStore = create((set, get) => ({
         ownedAgeMachines: new Set(),
         spins: SPINS_INITIAL,
         speedCoil: false,
+        wheelSpins: 0,
+        freeSpinReadyAt: readLocalFreeSpinReadyAt(),
         ageBoostUntil: 0,
       }),
     )
@@ -331,6 +360,11 @@ export const useGameStore = create((set, get) => ({
       const ownedAgeMachines = new Set(Array.isArray(saved.ownedAgeMachines) ? saved.ownedAgeMachines : [])
       const spins = Number.isFinite(saved.spins) ? clamp(Math.floor(saved.spins), 0, SPINS_MAX) : s.spins
       const speedCoil = typeof saved.speedCoil === 'boolean' ? saved.speedCoil : s.speedCoil
+      const wheelSpins = Number.isFinite(saved.wheelSpins) ? clamp(Math.floor(saved.wheelSpins), 0, SPINS_MAX) : s.wheelSpins
+      // The server sends the cooldown left as a duration (its clock, not ours).
+      const freeSpinReadyAt = Number.isFinite(saved.freeSpinInMs)
+        ? Date.now() + Math.max(0, saved.freeSpinInMs)
+        : s.freeSpinReadyAt
       const tier = HEX_SPEED_PAD_TIERS[equippedHexPad]
       return derive({
         ...s,
@@ -345,6 +379,8 @@ export const useGameStore = create((set, get) => ({
         ownedAgeMachines,
         spins,
         speedCoil,
+        wheelSpins,
+        freeSpinReadyAt,
       })
     })
   },

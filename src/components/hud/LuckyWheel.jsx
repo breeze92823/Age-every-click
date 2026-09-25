@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useGameStore } from '../../store/useGameStore.js'
 import { WHEEL_PRIZES, SPIN_PRICE_COINS } from '../../data/luckyWheel.js'
 import { formatCompact } from '../../systems/format.js'
+import { requestFreeSpin } from '../../systems/net.js'
 import { playButtonClick, playButtonHover, playLevelUp, playActionFail } from '../../systems/sfx.js'
 
 // Lucky Wheel popup, opened with E at the Statue (systems/statueInteract.js
@@ -39,6 +40,7 @@ const SLICE_LINES = {
   coins3000: ['3,000'],
   ageBoost: ['x2 Age', '(30s)'],
   age200: ['200', 'Age'],
+  noLuck: ['No', 'Luck'],
   speedCoil: ['X2 Click', 'Gain'],
 }
 
@@ -61,7 +63,7 @@ function PrizeIcon({ kind }) {
       </g>
     )
   }
-  const emoji = kind === 'coins' ? '🪙' : '🚀'
+  const emoji = kind === 'coins' ? '🪙' : kind === 'noLuck' ? '😢' : '🚀'
   return (
     <text textAnchor="middle" dominantBaseline="central" fontSize="22" style={{ filter: 'saturate(1.3)' }}>
       {emoji}
@@ -116,9 +118,20 @@ function WheelOverlay() {
 const GREEN_BTN =
   'flex items-center justify-center gap-[0.3em] rounded-[0.35em] border-[0.1em] border-black bg-gradient-to-b from-lime-400 to-green-600 px-[0.4em] py-[0.15em] font-black text-white shadow-[0_0.1em_0_rgba(0,0,0,0.45)] transition hover:brightness-110 active:translate-y-[0.05em] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:brightness-100'
 
+function formatCountdown(ms) {
+  const total = Math.ceil(ms / 1000)
+  const h = Math.floor(total / 3600)
+  const m = String(Math.floor((total % 3600) / 60)).padStart(2, '0')
+  const s = String(total % 60).padStart(2, '0')
+  return `${h}:${m}:${s}`
+}
+
 function WheelWindow() {
   const spins = useGameStore((s) => s.spins)
+  const freeSpinReadyAt = useGameStore((s) => s.freeSpinReadyAt)
   const closeWheel = useGameStore((s) => s.closeWheel)
+  const [now, setNow] = useState(() => Date.now())
+  const [claiming, setClaiming] = useState(false)
   const [rotation, setRotation] = useState(0)
   const [spinning, setSpinning] = useState(false)
   const [message, setMessage] = useState(null) // { text, ok }
@@ -140,6 +153,13 @@ function WheelWindow() {
   }, [spinning, closeWheel])
 
   useEffect(() => () => clearTimeout(timerRef.current), [])
+
+  // Ticks the free-spin countdown.
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  const freeLeftMs = Math.max(0, freeSpinReadyAt - now)
 
   const fail = (text) => {
     playActionFail()
@@ -168,8 +188,10 @@ function WheelWindow() {
 
     timerRef.current = setTimeout(() => {
       const text = useGameStore.getState().claimWheelPrize(index)
-      playLevelUp()
-      setMessage({ text, ok: true })
+      const won = WHEEL_PRIZES[index].kind !== 'noLuck'
+      if (won) playLevelUp()
+      else playActionFail()
+      setMessage({ text, ok: won })
       setSpinning(false)
     }, SPIN_MS + 150)
   }
@@ -181,6 +203,28 @@ function WheelWindow() {
       setMessage({ text: '+1 Spin!', ok: true })
     } else {
       fail(`Need ${formatCompact(SPIN_PRICE_COINS)} Coins to buy a spin`)
+    }
+  }
+
+  // The daily free spin: the server (or, for a guest, systems/freeSpin.js)
+  // decides whether it's ready — see requestFreeSpin in systems/net.js.
+  const onClaimFree = async () => {
+    if (spinning || claiming || freeLeftMs > 0) return
+    setClaiming(true)
+    const res = await requestFreeSpin()
+    setClaiming(false)
+    const store = useGameStore.getState()
+    if (res.ok) {
+      store.grantFreeSpin(res.nextInMs)
+      playButtonClick()
+      setMessage({ text: '+1 Free Spin!', ok: true })
+    } else if (res.reason === 'cooldown') {
+      store.setFreeSpinCooldown(res.nextInMs)
+      fail('Free spin is not ready yet')
+    } else if (res.reason === 'offline') {
+      fail("Can't reach the server — try again shortly")
+    } else {
+      fail('Free spin unavailable right now')
     }
   }
 
@@ -229,7 +273,7 @@ function WheelWindow() {
           )}
         </div>
 
-        <div className="mx-auto mt-[0.2em] grid w-[70%] grid-cols-[1fr_1.5fr] items-end gap-[0.5em]">
+        <div className="mt-[0.2em] grid w-full grid-cols-[1fr_1.5fr_1fr] items-end gap-[0.5em]">
           <div className="flex flex-col items-stretch gap-[0.2em]">
             <span
               className="rounded-[0.3em] border-[0.08em] border-black bg-black/80 py-[0.1em] text-center font-black text-white"
@@ -260,6 +304,34 @@ function WheelWindow() {
           >
             (x{spins}) SPIN
           </button>
+
+          <div className="flex flex-col items-stretch gap-[0.2em]">
+            <span
+              className="rounded-[0.3em] border-[0.08em] border-black bg-black/80 py-[0.1em] text-center font-black text-white"
+              style={{ fontSize: '0.6em' }}
+            >
+              Free Spin
+            </span>
+            <button
+              type="button"
+              onClick={onClaimFree}
+              onMouseEnter={playButtonHover}
+              disabled={spinning || claiming || freeLeftMs > 0}
+              className={GREEN_BTN}
+              style={OUTLINE}
+            >
+              {freeLeftMs > 0 ? (
+                <span className="tabular-nums" style={{ fontSize: '0.8em' }}>
+                  {formatCountdown(freeLeftMs)}
+                </span>
+              ) : (
+                <>
+                  <span aria-hidden="true">🎁</span>
+                  <span>Claim</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -35,10 +35,10 @@ const TELEPORT_DISTANCE = 15
 // Motion feel, layered on top of the follow cam as a small offset/roll that
 // never feeds back into the smoothed rig position.
 const BOB_FREQ = 2.1 // footfalls' worth of bob cycles per second at full speed
-const BOB_VERTICAL = 0.055 // m, up/down bounce (twice per bob cycle)
-const BOB_LATERAL = 0.03 // m, side-to-side sway (once per bob cycle)
-const BOB_ROLL = 0.006 // rad, slight roll that follows the sway
-const STRAFE_ROLL = 0.045 // rad, max lean into a sideways move
+const BOB_VERTICAL = 0.04 // m, up/down bounce (twice per bob cycle)
+const BOB_LATERAL = 0.022 // m, side-to-side sway (once per bob cycle)
+const BOB_ROLL = 0.004 // rad, slight roll that follows the sway
+const STRAFE_ROLL = 0.03 // rad, max lean into a sideways move
 const STRAFE_SMOOTHING = 8
 const IDLE_SWAY_X = 0.018 // m
 const IDLE_SWAY_Y = 0.024 // m, breathing
@@ -52,6 +52,20 @@ let bobPhase = 0
 let idleTime = 0
 let walkAmp = 0
 let strafeRoll = 0
+
+// Jump/landing kick: a damped spring on the camera's vertical offset that
+// takeoff and touchdown push on. Slightly underdamped so it settles with one
+// small rebound.
+const KICK_STIFFNESS = 120
+const KICK_DAMPING = 14
+const JUMP_DIP = 0.3 // m/s of downward push at takeoff
+const LAND_DIP_PER_SPEED = 0.09 // m/s of push per m/s of fall speed
+const LAND_MIN_SPEED = 2.5 // m/s, softer touchdowns (small drops) are ignored
+const LAND_MAX_SPEED = 14 // m/s, caps the dip on long falls
+let kickY = 0
+let kickV = 0
+let wasGrounded = true
+let airFallSpeed = 0 // fastest downward speed this airtime; velocity.y is zeroed on touchdown
 const lastTarget = { x: 0, y: 0, z: 0 }
 let initialised = false
 let sensitivity = 1
@@ -154,6 +168,27 @@ function applyMotionFeel(camera, dt, teleported) {
   if (teleported) {
     walkAmp = 0
     strafeRoll = 0
+    kickY = 0
+    kickV = 0
+    airFallSpeed = 0
+    wasGrounded = player.grounded
+  }
+
+  if (wasGrounded && !player.grounded && player.velocity.y > 0) {
+    kickV -= JUMP_DIP
+  } else if (!wasGrounded && player.grounded && airFallSpeed > LAND_MIN_SPEED) {
+    kickV -= Math.min(airFallSpeed, LAND_MAX_SPEED) * LAND_DIP_PER_SPEED
+  }
+  wasGrounded = player.grounded
+  airFallSpeed = player.grounded ? 0 : Math.max(airFallSpeed, -player.velocity.y)
+
+  // Substep so a long frame can't blow up the spring.
+  let remaining = Math.min(dt, 0.1)
+  while (remaining > 0) {
+    const h = Math.min(remaining, 1 / 120)
+    kickV += (-KICK_STIFFNESS * kickY - KICK_DAMPING * kickV) * h
+    kickY += kickV * h
+    remaining -= h
   }
 
   const k = dt > 0 ? 1 - Math.exp(-AMP_SMOOTHING * dt) : 1
@@ -168,7 +203,7 @@ function applyMotionFeel(camera, dt, teleported) {
   const bobSin = Math.sin(bobPhase)
   const bobY = Math.abs(Math.cos(bobPhase)) * 2 - 1 // -1..1, two dips per cycle
 
-  const offY = bobY * BOB_VERTICAL * walkAmp + Math.sin(idleTime * 1.3) * IDLE_SWAY_Y * idle
+  const offY = bobY * BOB_VERTICAL * walkAmp + Math.sin(idleTime * 1.3) * IDLE_SWAY_Y * idle + kickY
   const offSide = bobSin * BOB_LATERAL * walkAmp + Math.sin(idleTime * 0.7) * IDLE_SWAY_X * idle
 
   // Lateral offset goes along the camera's own right vector.
