@@ -28,12 +28,20 @@ jobs:
           fi
 
       - name: Build
+        # dev channel builds with `--mode development` (npm run build:dev), so
+        # src/data/net.js picks VITE_SERVER_URL_DEV over VITE_SERVER_URL_MAIN
+        # -- see that file's own comment for why the two are kept separate
+        # rather than one shared VITE_SERVER_URL. Age-every-click-backend
+        # deploys those same two channels independently (its own deploy.yml).
         run: |
           if [ "${{ steps.channel.outputs.channel }}" = "prod" ]; then
             npm run build
           else
             npm run build:dev
           fi
+        env:
+          VITE_SERVER_URL_DEV: ${{ vars.SERVER_URL_DEV }}
+          VITE_SERVER_URL_MAIN: ${{ vars.SERVER_URL_MAIN }}
 
       - name: Zip build
         run: cd dist && zip -r ../build.zip . && cd ..

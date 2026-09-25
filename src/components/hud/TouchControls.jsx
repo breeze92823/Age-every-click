@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useRef } from 'react'
-import { setTouchMove, addTouchLook, addTouchZoom, pressTouchJump } from '../../systems/input.js'
+import { setTouchMove, addTouchLook, addTouchZoom, pressTouchJump, pressTouchInteract } from '../../systems/input.js'
+import { useInteractPrompt } from '../../systems/interactPrompt.js'
 import { useTouchMode } from './hooks.js'
 
 // On-screen controls for a touch session. DOM siblings of the canvas like
@@ -185,6 +186,36 @@ function JumpButton() {
   )
 }
 
+// Only rendered while an obby entry pad's "Press E" prompt is armed (see
+// systems/interactPrompt.js and systems/scenePortals.js) — touch has no E
+// key, so this is its equivalent of pressing it.
+function InteractButton() {
+  const label = useInteractPrompt((s) => s.label)
+  if (!label) return null
+
+  return (
+    <button
+      type="button"
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId)
+        pressTouchInteract()
+      }}
+      onContextMenu={(e) => e.preventDefault()}
+      className="pointer-events-auto fixed select-none rounded-full border border-white/35 bg-slate-900/55 text-sm font-bold tracking-wide text-white shadow-lg backdrop-blur-sm transition-transform active:scale-95"
+      style={{
+        width: 'clamp(56px, 13vmin, 76px)',
+        height: 'clamp(56px, 13vmin, 76px)',
+        right: 'calc(env(safe-area-inset-right, 0px) + 18px)',
+        bottom: 'calc(env(safe-area-inset-bottom, 0px) + 108px)',
+        touchAction: 'none',
+        zIndex: 40,
+      }}
+    >
+      USE
+    </button>
+  )
+}
+
 export default function TouchControls() {
   const on = useTouchMode()
 
@@ -209,6 +240,7 @@ export default function TouchControls() {
       <LookZone />
       <MoveStick />
       <JumpButton />
+      <InteractButton />
     </div>
   )
 }

@@ -9,6 +9,7 @@ import StudJumpsScene from './components/StudJumpsScene.jsx'
 import TsunamiScene from './components/TsunamiScene.jsx'
 import Player from './components/Player.jsx'
 import Hud from './components/hud/Hud.jsx'
+import LoadingScreen from './components/LoadingScreen.jsx'
 import { useGameStore } from './store/useGameStore.js'
 
 export default function App() {
@@ -58,6 +59,7 @@ export default function App() {
         <Player />
       </Canvas>
       <Hud />
+      <LoadingScreen />
     </>
   )
 }

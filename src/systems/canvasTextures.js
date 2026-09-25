@@ -220,6 +220,54 @@ export function makeStatusTagTexture(text, { px = 96 } = {}) {
   return { texture, aspect: w / h }
 }
 
+// Ranked rows of name + value baked onto a wood-plaque backing — the
+// leaderboard signboards' plaque texture. `entries` is ordered best-first;
+// top 3 ranks get a medal-tint number.
+export function makeLeaderboardTexture(entries, { accent = '#ffd23d', w = 600, h = 400 } = {}) {
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const g = canvas.getContext('2d')
+
+  g.fillStyle = '#3d2410'
+  g.fillRect(0, 0, w, h)
+
+  const padX = w * 0.06
+  const padY = h * 0.05
+  const rowH = (h - padY * 2) / entries.length
+  const rankColors = ['#ffd54a', '#d8dce3', '#e08a3c']
+
+  g.textBaseline = 'middle'
+  entries.forEach((entry, i) => {
+    const rowY = padY + rowH * i
+    const y = rowY + rowH / 2
+    if (i % 2 === 1) {
+      g.fillStyle = 'rgba(255, 255, 255, 0.06)'
+      g.fillRect(padX * 0.4, rowY, w - padX * 0.8, rowH)
+    }
+
+    const fontSize = rowH * 0.55
+    g.textAlign = 'left'
+    g.font = `900 ${fontSize}px ${LABEL_FONT}`
+    g.fillStyle = rankColors[i] || '#c9a876'
+    g.fillText(`${i + 1}.`, padX, y)
+
+    g.font = `700 ${fontSize * 0.9}px ${LABEL_FONT}`
+    g.fillStyle = '#f4ead2'
+    g.fillText(entry.name, padX + fontSize * 1.6, y)
+
+    g.textAlign = 'right'
+    g.font = `900 ${fontSize * 0.9}px ${LABEL_FONT}`
+    g.fillStyle = accent
+    g.fillText(entry.value, w - padX, y)
+  })
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.anisotropy = 4
+  return texture
+}
+
 // `count` chevrons per tile, pointing along +U. Transparent when no
 // background is given, for floor arrows laid over another surface.
 export function makeChevronTexture({ color, background = null, count = 1 }) {

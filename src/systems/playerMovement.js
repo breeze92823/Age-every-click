@@ -12,6 +12,7 @@ import { studJumpsGroundAt, resolveStudJumpsWalls, stepStudJumps } from './studJ
 import { tsunamiGroundAt, resolveTsunamiWalls, stepTsunami, resetTsunami } from './tsunamiScene.js'
 import { syncYawToPlayer } from './cameraOrbit.js'
 import { useGameStore } from '../store/useGameStore.js'
+import { setInteractPrompt } from './interactPrompt.js'
 
 // Kinematic capsule, stepped once per frame: apply input -> gravity ->
 // integrate -> clamp to the ground height under the player's feet. Ground
@@ -58,8 +59,16 @@ export function step(dt) {
     player.velocity.y = 0
     player.velocity.z = 0
     player.grounded = true
+    setInteractPrompt(null)
     return
   }
+
+  // Edge-triggered E keydown, consumed once per frame by checkScenePortal
+  // below — entering the Impossible Bridge/Stud Jumps/Tsunami Escape obby
+  // scenes from the island needs a press, same "press E" mechanism as
+  // Ice-Skate's proximity pads, minus its 2s hold gate.
+  const interactPressed = inputState.interact
+  inputState.interact = false
 
   // Which environment is mounted right now — the island's obstacles/terrain
   // steps only apply while standing in it; the Bonus Scene's glass bridge
@@ -69,6 +78,10 @@ export function step(dt) {
   const onBonus = currentScene === 'bonus'
   const onStudJumps = currentScene === 'studJumps'
   const onTsunami = currentScene === 'tsunami'
+  // Cleared by default each frame on the island; checkScenePortal re-arms it
+  // below if the player is standing near an entry pad. In the obby scenes
+  // themselves the prompt is never used, so it just stays cleared there.
+  if (onIsland) setInteractPrompt(null)
 
   // Camera-relative ground basis.
   const yaw = getYaw()
@@ -153,10 +166,11 @@ export function step(dt) {
   if (onStudJumps && stepStudJumps()) return
   if (onTsunami && stepTsunami(dt)) return
 
-  // Stepping onto the Impossible Bridge, Stud Jumps or Tsunami Escape pad
-  // (or the exit pad in whichever scene that led to) swaps which environment
-  // is mounted and re-spawns the player there — see scenePortals.js.
-  const portal = checkScenePortal(p.x, p.z, currentScene)
+  // Pressing E on the Impossible Bridge, Stud Jumps or Tsunami Escape pad
+  // (or standing on the exit pad in whichever scene that led to, which
+  // stays collide-triggered) swaps which environment is mounted and
+  // re-spawns the player there — see scenePortals.js.
+  const portal = checkScenePortal(p.x, p.z, currentScene, interactPressed)
   if (portal) {
     if (portal.scene === 'bonus') resetBonusBridge()
     if (portal.scene === 'tsunami') resetTsunami()

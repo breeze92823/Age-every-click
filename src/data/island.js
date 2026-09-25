@@ -64,6 +64,12 @@ export const SHOP = { x: -2.5, z: 1 }
 export const STATUE = { x: 5, z: 1, yaw: -0.5 }
 export const PETS = { x: 19.5, z: -25 }
 
+// Temporarily hidden (not yet content-ready) — the "FREE"/"SHOP"/"PETS"
+// billboard labels above those landmarks only render when explicitly opted
+// into via .env. The models themselves (and their collision) stay as-is.
+// See .env.example.
+export const SHOW_SHOP_FREE_PETS_LABELS = import.meta.env.VITE_SHOW_SHOP_FREE_PETS_LABELS === 'true'
+
 export const OBBY = {
   x: 23,
   signZ: -4.2,
@@ -74,9 +80,16 @@ export const OBBY = {
   ],
 }
 
+// `stat` is the store/useGameStore.js field each board ranks by — also what
+// systems/net.js's getLeaderboard(stat, limit) reads. components/
+// IslandLandmarks.jsx's Leaderboard component polls that live, merged
+// (online + all-time-saved) ranking instead of a fixed roster; offline/solo
+// (or before a game server is configured) it degrades to just the local
+// player's own row, same "never blocks, never intrudes" stance as the rest
+// of the netcode.
 export const LEADERBOARDS = [
-  { x: -2.8, z: 13.5, title: 'Top Coins', color: '#ffd23d' },
-  { x: 2.8, z: 13.5, title: 'Top Age', color: '#4fd8ff' },
+  { x: -2.8, z: 13.5, title: 'Top Coins', color: '#ffd23d', stat: 'coins' },
+  { x: 2.8, z: 13.5, title: 'Top Age', color: '#4fd8ff', stat: 'speed' },
 ]
 
 export const TRAMPOLINE = { x: -20, z: 8, radius: 1.6 }

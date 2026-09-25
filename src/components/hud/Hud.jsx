@@ -22,6 +22,7 @@ import IdentityChip from './IdentityChip.jsx'
 import ActionResult from './ActionResult.jsx'
 import ActionPopups from './ActionPopups.jsx'
 import BonusTimer from './BonusTimer.jsx'
+import InteractPrompt from './InteractPrompt.jsx'
 import { useSettings, useTouchMode } from './hooks.js'
 
 // This Hud is ported from Ice-Skate's components/hud/Hud.jsx: same LevelBar/
@@ -429,8 +430,10 @@ function ReturnButton() {
 
 // DOM siblings of the canvas, never drei <Html>. Ported from Ice-Skate's
 // components/hud/Hud.jsx; its merchant/hexPad/afk "Press E" proximity
-// prompts and death prompt are dropped — this template has no such props,
-// no PVP zone, and no held-E interaction system.
+// prompts and death prompt are dropped (this template has no such props and
+// no PVP zone) — but entering the Impossible Bridge/Stud Jumps/Tsunami
+// Escape obby scenes does reuse the "Press E" mechanism, via InteractPrompt
+// below (see systems/scenePortals.js).
 export default function Hud() {
   useSettings()
 
@@ -483,6 +486,10 @@ export default function Hud() {
       {/* Bottom-center "Return" button — only visible while riding an Age
          Machine, the sole way out of its movement freeze. */}
       <ReturnButton />
+
+      {/* Bottom-center "Press E to ..." pill — armed while standing on one
+         of the island's obby entry pads (see systems/scenePortals.js). */}
+      <InteractPrompt />
 
       {/* Full-screen "rotate to landscape" gate for touch sessions. Last
          child + highest z-index so it covers the touch controls while up. */}

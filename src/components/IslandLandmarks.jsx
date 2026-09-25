@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { DoubleSide } from 'three'
 import { MATERIAL_PBR } from '../data/materials.js'
 import { GROUND_Y, ISLAND_SCALE } from '../data/world.js'
@@ -15,7 +15,9 @@ import {
   OBBY,
   LEADERBOARDS,
   TRAMPOLINE,
+  SHOW_SHOP_FREE_PETS_LABELS,
 } from '../data/island.js'
+import { LEADERBOARD_VISIBLE_ROWS, LEADERBOARD_POLL_MS } from '../data/net.js'
 import {
   makeLabelTexture,
   makeTierLabelTexture,
@@ -23,9 +25,12 @@ import {
   makePriceTagTexture,
   makeBuyButtonTexture,
   makeStatusTagTexture,
+  makeLeaderboardTexture,
 } from '../systems/canvasTextures.js'
 import { formatCompact } from '../systems/format.js'
+import { formatShort } from '../data/format.js'
 import { useGameStore } from '../store/useGameStore.js'
+import { getLeaderboard, subscribe as subscribeNet } from '../systems/net.js'
 import { playButtonClick, playActionFail } from '../systems/sfx.js'
 
 // The hub's set pieces, laid out per data/island.js. Everything faces +Z,
@@ -241,7 +246,7 @@ function FreeBooth() {
       ))}
       <Box size={[0.7, 0.7, 0.7]} position={[0, 0.95, 0.2]} color="#ffd23d" />
       <Box size={[0.72, 0.72, 0.16]} position={[0, 0.95, 0.2]} color="#e0342f" cast={false} />
-      <Label text="FREE" color="#ffd23d" position={[0, 3, 0]} height={0.9} />
+      {SHOW_SHOP_FREE_PETS_LABELS && <Label text="FREE" color="#ffd23d" position={[0, 3, 0]} height={0.9} />}
     </group>
   )
 }
@@ -290,7 +295,7 @@ function Shop() {
           />
         ))}
       </group>
-      <Label text="SHOP" color="#ffd23d" position={[0, 4.1, 0]} height={1} />
+      {SHOW_SHOP_FREE_PETS_LABELS && <Label text="SHOP" color="#ffd23d" position={[0, 4.1, 0]} height={1} />}
     </group>
   )
 }
@@ -350,7 +355,7 @@ function Pets() {
         <Mat color="#3fbf5a" />
       </mesh>
       <Box size={[1.2, 2, 1.2]} position={[1.7, 1.3, -1.6]} color="#d6d9df" />
-      <Label text="PETS" color="#ffd23d" position={[0, 3.3, 0]} height={0.9} />
+      {SHOW_SHOP_FREE_PETS_LABELS && <Label text="PETS" color="#ffd23d" position={[0, 3.3, 0]} height={0.9} />}
     </group>
   )
 }
@@ -376,16 +381,60 @@ function Obby() {
   )
 }
 
-function Leaderboard({ x, z, title, color }) {
+// Polls systems/net.js's getLeaderboard(stat, limit) on LEADERBOARD_POLL_MS
+// rather than reactively on every store change: an actively-clicking player's
+// `speed` changes many times a second, and redrawing this board's canvas
+// texture that often (a real recreate + redraw, unlike drei <Text>) would be
+// wasted work for a board nobody can read that fast anyway. Also refreshes
+// immediately whenever systems/net.js emits (a fresh 'leaderboard' broadcast,
+// or a connect/disconnect), so the board doesn't sit on stale rows for a full
+// poll interval after those.
+function useLeaderboardRows(stat) {
+  const [rows, setRows] = useState(() => getLeaderboard(stat, LEADERBOARD_VISIBLE_ROWS))
+  useEffect(() => {
+    const tick = () => setRows(getLeaderboard(stat, LEADERBOARD_VISIBLE_ROWS))
+    tick()
+    const offNet = subscribeNet(tick)
+    const poll = setInterval(tick, LEADERBOARD_POLL_MS)
+    return () => {
+      offNet()
+      clearInterval(poll)
+    }
+  }, [stat])
+  return rows
+}
+
+// `stat` (data/island.js's LEADERBOARDS) makes this board LIVE: rows come
+// from systems/net.js's getLeaderboard(stat, limit) — our own row straight
+// off the live store, every other row from whichever players are currently
+// online/saved (Age-every-click-backend's merged leaderboard broadcast).
+// Offline/solo, or before a game server is configured, that degrades to just
+// our own row — same "never blocks, never intrudes" stance as the rest of
+// the netcode. The "Top Age" board (`stat === 'speed'`) prefixes its values
+// with "Age " to match the HUD's own "Age: N" convention (components/hud/
+// LevelBar.jsx); "Top Coins" shows the bare formatted number.
+function Leaderboard({ x, z, title, color, stat }) {
+  const rows = useLeaderboardRows(stat)
+  const entries = useMemo(
+    () =>
+      rows.map((row) => ({
+        name: row.name,
+        value: stat === 'speed' ? `Age ${formatShort(row.value)}` : formatShort(row.value),
+      })),
+    [rows, stat],
+  )
+  const texture = useMemo(() => makeLeaderboardTexture(entries, { accent: color }), [entries, color])
+  useEffect(() => () => texture.dispose(), [texture])
   return (
-    <group position={[x, GROUND_Y, z]}>
+    <group position={[x, GROUND_Y, z]} rotation={[0, Math.PI, 0]}>
       <Box size={[0.25, 3.2, 0.25]} position={[-1.5, 1.6, 0]} color={WOOD_DARK} />
       <Box size={[0.25, 3.2, 0.25]} position={[1.5, 1.6, 0]} color={WOOD_DARK} />
       <Box size={[3.4, 2.4, 0.3]} position={[0, 2.3, 0]} color={WOOD} />
       <Box size={[3, 2, 0.05]} position={[0, 2.3, 0.17]} color="#5b3419" cast={false} />
-      {[3, 2.6, 2.2, 1.8].map((y) => (
-        <Box key={y} size={[2.4, 0.14, 0.02]} position={[0, y, 0.2]} color="#e8d3a8" cast={false} />
-      ))}
+      <mesh position={[0, 2.3, 0.2]}>
+        <planeGeometry args={[2.7, 1.8]} />
+        <meshBasicMaterial map={texture} toneMapped={false} />
+      </mesh>
       <Label text={title} color={color} position={[0, 3.95, 0]} height={0.65} />
     </group>
   )
