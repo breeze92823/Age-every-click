@@ -13,12 +13,13 @@ import { setInteractPrompt } from './interactPrompt.js'
 // each frame and already returns to island (with a payout) when the player
 // reaches it, so this never gets a chance to fire for that pad.
 //
-// Entering from the island is gated behind "Press E" (interactPressed, this
-// frame's edge-triggered E keydown from playerMovement.js) rather than
-// firing the instant the player steps onto the pad — standing on a pad only
-// arms systems/interactPrompt.js's HUD prompt. The return trips (obby ->
-// island exit pads, and the Bonus Scene's own reward/finish pads) stay
-// collide-triggered, unchanged.
+// Entering from the island is gated behind holding E (interactHeld, from
+// playerMovement.js) for HOLD_SECONDS rather than firing the instant the
+// player steps onto the pad — standing on a pad only arms
+// systems/interactPrompt.js's HUD prompt, and its progress field drives the
+// hold-ring animation while E is held. The return trips (obby -> island exit
+// pads, and the Bonus Scene's own reward/finish pads) stay collide-triggered,
+// unchanged.
 
 const IMPOSSIBLE_BRIDGE = OBBY.pads.find((p) => p.name === 'Impossible Bridge')
 const STUD_JUMPS = OBBY.pads.find((p) => p.name === 'Stud Jumps')
@@ -28,21 +29,28 @@ const TSUNAMI_ESCAPE = OBBY.pads.find((p) => p.name === 'Tsunami Escape')
 // OBBY's pads are authored in the island's scaled group, so worldX/worldZ
 // need dividing by ISLAND_SCALE before comparing against these. Radius is
 // well past the pads' own 2.4x2.4 footprint (island.js's Obby() box) so the
-// "Press E" prompt shows several strides out — bigger than the pads' 4-unit
+// "Hold E" prompt shows several strides out — bigger than the pads' 4-unit
 // spacing is fine too, since checkScenePortal always picks whichever pad is
 // nearest, so overlapping approach zones never show the wrong prompt.
 const PORTAL_RADIUS = 2.8
+const HOLD_SECONDS = 2 // how long E/USE must be held on a pad before it triggers, matching Ice-Skate's HOLD_MS
 const PORTALS = [
-  { x: OBBY.x, z: IMPOSSIBLE_BRIDGE.z, label: 'Press E to Enter Impossible Bridge', scene: 'bonus', spawn: BONUS_SPAWN, facing: BONUS_SPAWN_FACING },
-  { x: OBBY.x, z: STUD_JUMPS.z, label: 'Press E to Enter Stud Jumps', scene: 'studJumps', spawn: STUD_JUMPS_SPAWN },
-  { x: OBBY.x, z: TSUNAMI_ESCAPE.z, label: 'Press E to Enter Tsunami Escape', scene: 'tsunami', spawn: TSUNAMI_SPAWN },
+  { x: OBBY.x, z: IMPOSSIBLE_BRIDGE.z, label: 'Hold E to Enter Impossible Bridge', scene: 'bonus', spawn: BONUS_SPAWN, facing: BONUS_SPAWN_FACING },
+  { x: OBBY.x, z: STUD_JUMPS.z, label: 'Hold E to Enter Stud Jumps', scene: 'studJumps', spawn: STUD_JUMPS_SPAWN },
+  { x: OBBY.x, z: TSUNAMI_ESCAPE.z, label: 'Hold E to Enter Tsunami Escape', scene: 'tsunami', spawn: TSUNAMI_SPAWN },
 ]
 
+// Which portal's hold is currently in progress, and how far into
+// HOLD_SECONDS it's gotten — module-level rather than per-call state since
+// checkScenePortal is called fresh every frame from playerMovement.js.
+let holdScene = null
+let holdElapsed = 0
+
 // Returns { scene, spawn, facing? } to teleport into this frame, or null if
-// the player isn't near any trigger (or is, but hasn't pressed E yet for an
-// island entry pad). facing is only set where a scene wants something other
-// than resetPlayer's default (Math.PI).
-export function checkScenePortal(worldX, worldZ, currentScene, interactPressed) {
+// the player isn't near any trigger (or is, but hasn't held E long enough
+// yet for an island entry pad). facing is only set where a scene wants
+// something other than resetPlayer's default (Math.PI).
+export function checkScenePortal(worldX, worldZ, currentScene, interactHeld, dt) {
   if (currentScene === 'island') {
     const lx = worldX / ISLAND_SCALE
     const lz = worldZ / ISLAND_SCALE
@@ -58,11 +66,26 @@ export function checkScenePortal(worldX, worldZ, currentScene, interactPressed) 
       }
     }
     if (nearest) {
-      setInteractPrompt(nearest.label)
-      if (!interactPressed) return null
-      setInteractPrompt(null)
-      return { scene: nearest.scene, spawn: nearest.spawn, facing: nearest.facing }
+      // Reset the hold clock whenever E isn't down, or it's down but aimed
+      // at a different pad than the one already being held.
+      if (!interactHeld || holdScene !== nearest.scene) {
+        holdScene = interactHeld ? nearest.scene : null
+        holdElapsed = 0
+      }
+      if (interactHeld) {
+        holdElapsed += dt
+        if (holdElapsed >= HOLD_SECONDS) {
+          holdScene = null
+          holdElapsed = 0
+          setInteractPrompt(null)
+          return { scene: nearest.scene, spawn: nearest.spawn, facing: nearest.facing }
+        }
+      }
+      setInteractPrompt(nearest.label, holdElapsed / HOLD_SECONDS)
+      return null
     }
+    holdScene = null
+    holdElapsed = 0
     setInteractPrompt(null)
   } else if (currentScene === 'studJumps') {
     const half = STUD_JUMPS_EXIT_PAD.size / 2

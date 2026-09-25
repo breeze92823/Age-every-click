@@ -66,13 +66,6 @@ export function step(dt) {
     return
   }
 
-  // Edge-triggered E keydown, consumed once per frame by checkScenePortal
-  // below — entering the Impossible Bridge/Stud Jumps/Tsunami Escape obby
-  // scenes from the island needs a press, same "press E" mechanism as
-  // Ice-Skate's proximity pads, minus its 2s hold gate.
-  const interactPressed = inputState.interact
-  inputState.interact = false
-
   // Which environment is mounted right now — the island's obstacles/terrain
   // steps only apply while standing in it; the Bonus Scene's glass bridge
   // has its own ground lookup in bonusBridge.js.
@@ -192,11 +185,11 @@ export function step(dt) {
   if (onStudJumps && stepStudJumps()) return
   if (onTsunami && stepTsunami(dt)) return
 
-  // Pressing E on the Impossible Bridge, Stud Jumps or Tsunami Escape pad
+  // Holding E on the Impossible Bridge, Stud Jumps or Tsunami Escape pad
   // (or standing on the exit pad in whichever scene that led to, which
   // stays collide-triggered) swaps which environment is mounted and
   // re-spawns the player there — see scenePortals.js.
-  const portal = checkScenePortal(p.x, p.z, currentScene, interactPressed)
+  const portal = checkScenePortal(p.x, p.z, currentScene, inputState.interactHeld, dt)
   if (portal) {
     if (portal.scene === 'bonus') resetBonusBridge()
     if (portal.scene === 'tsunami') resetTsunami()

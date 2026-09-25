@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useRef } from 'react'
-import { setTouchMove, addTouchLook, addTouchZoom, pressTouchJump, pressTouchInteract } from '../../systems/input.js'
+import { setTouchMove, addTouchLook, addTouchZoom, pressTouchJump, pressTouchInteract, releaseTouchInteract } from '../../systems/input.js'
 import { useInteractPrompt } from '../../systems/interactPrompt.js'
 import { useTouchMode } from './hooks.js'
 
@@ -186,11 +186,14 @@ function JumpButton() {
   )
 }
 
-// Only rendered while an obby entry pad's "Press E" prompt is armed (see
+// Only rendered while an obby entry pad's "Hold E" prompt is armed (see
 // systems/interactPrompt.js and systems/scenePortals.js) — touch has no E
-// key, so this is its equivalent of pressing it.
+// key, so this is its equivalent of holding it down. The ring fills with
+// progress (0..1) from the same hold-timer InteractPrompt.jsx draws for
+// keyboard, and releasing (or dragging off) clears the hold immediately.
 function InteractButton() {
   const label = useInteractPrompt((s) => s.label)
+  const progress = useInteractPrompt((s) => s.progress)
   if (!label) return null
 
   return (
@@ -200,8 +203,11 @@ function InteractButton() {
         e.currentTarget.setPointerCapture(e.pointerId)
         pressTouchInteract()
       }}
+      onPointerUp={releaseTouchInteract}
+      onPointerCancel={releaseTouchInteract}
+      onLostPointerCapture={releaseTouchInteract}
       onContextMenu={(e) => e.preventDefault()}
-      className="pointer-events-auto fixed select-none rounded-full border border-white/35 bg-slate-900/55 text-sm font-bold tracking-wide text-white shadow-lg backdrop-blur-sm transition-transform active:scale-95"
+      className="pointer-events-auto fixed select-none rounded-full border border-white/35 text-sm font-bold tracking-wide text-white shadow-lg backdrop-blur-sm transition-transform active:scale-95"
       style={{
         width: 'clamp(56px, 13vmin, 76px)',
         height: 'clamp(56px, 13vmin, 76px)',
@@ -209,6 +215,7 @@ function InteractButton() {
         bottom: 'calc(env(safe-area-inset-bottom, 0px) + 108px)',
         touchAction: 'none',
         zIndex: 40,
+        background: `conic-gradient(#22d3ee ${progress * 360}deg, rgba(15, 23, 42, 0.55) 0deg)`,
       }}
     >
       USE

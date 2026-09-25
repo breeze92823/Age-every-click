@@ -38,14 +38,16 @@ import { showActionResult } from '../systems/actionResult.js'
 
 // The hub's set pieces, laid out per data/island.js. Everything faces +Z,
 // toward the spawn camera. Heights are in metres against the 1.8 m player.
-// Most of these are static obstacles the player collides with — see
-// landmarkCollision.js for the blocking radii and what's deliberately left
-// walkable (SpawnPad, the Obby pads, the Trampoline).
+// Most of these are static obstacles the player collides with, including the
+// Obby entry pads — see landmarkCollision.js for the blocking radii and
+// what's deliberately left walkable (SpawnPad, the Trampoline).
 
 const WOOD = '#9c6232'
 const WOOD_DARK = '#6e4221'
 const STONE = '#a9aeb8'
 const METAL = '#2e3138'
+// Statue's medallion — pie-slice wedge colors, prize-wheel style.
+const WHEEL_COLORS = ['#ff5b7f', '#ffcb3d', '#3ddb6a', '#5fc9ff', '#e04cf0', '#ff8a3d', '#35d0ff', '#f4f0ff']
 // AgeMachine's glass shell radius — shared with AgeMachines so the price/Buy
 // banner can sit flush against its +Z (camera-facing) surface.
 const GLASS_RADIUS = 0.6
@@ -275,7 +277,7 @@ function Shop() {
   const awningWidth = 3.8
   const stripeWidth = awningWidth / stripes
   return (
-    <group position={[SHOP.x, GROUND_Y, SHOP.z]}>
+    <group position={[SHOP.x, GROUND_Y, SHOP.z]} rotation-y={Math.PI}>
       <Box size={[3.4, 2.6, 0.2]} position={[0, 1.3, -0.9]} color="#c98a4b" />
       <Box size={[3.4, 1, 1.2]} position={[0, 0.5, 0.6]} color="#b5703a" />
       <Box size={[3.6, 0.12, 1.4]} position={[0, 1.06, 0.6]} color={WOOD_DARK} />
@@ -305,15 +307,44 @@ function Shop() {
   )
 }
 
+// Statue's original design yaw — the medallion's facing is pinned to this,
+// not to the live STATUE.yaw, so that turning the statue (STATUE.yaw) turns
+// the whole thing, medallion included, instead of the medallion silently
+// undoing the change to keep facing the leaderboards.
+const STATUE_BASE_YAW = -0.5
+
 function Statue() {
+  const wheelRef = useRef(null)
+  const leaderboardYaw = useMemo(() => {
+    const cx = (LEADERBOARDS[0].x + LEADERBOARDS[1].x) / 2
+    const cz = (LEADERBOARDS[0].z + LEADERBOARDS[1].z) / 2
+    return Math.atan2(cx - STATUE.x, cz - STATUE.z) - STATUE_BASE_YAW
+  }, [])
   return (
     <group position={[STATUE.x, GROUND_Y, STATUE.z]} rotation-y={STATUE.yaw}>
       <Box size={[1.8, 0.6, 1.8]} position={[0, 0.3, 0]} color="#8e939c" />
-      <Box size={[1.2, 0.3, 1.2]} position={[0, 0.75, 0]} color="#9aa0aa" />
-      <mesh position={[0, 2.35, 0]} rotation={[Math.PI / 2 - 0.15, 0, 0]} scale={[1, 1, 1.25]} castShadow>
-        <cylinderGeometry args={[1.25, 1.25, 0.3, 24]} />
-        <Mat color={STONE} />
-      </mesh>
+      <Box size={[1.2, 0.5, 1.2]} position={[0, 0.85, 0]} color="#9aa0aa" />
+      <group position={[0, 2.35, 0]} rotation-y={leaderboardYaw}>
+        <group ref={wheelRef} rotation-x={Math.PI / 2 - 0.15}>
+          <mesh castShadow>
+            <cylinderGeometry args={[1.25, 1.25, 0.3, 24]} />
+            <Mat color={STONE} />
+          </mesh>
+          {/* Colored decal on the outward (leaderboard-facing) side only — the
+              back face and rim stay plain stone. */}
+          <group position={[0, 0.17, 0]}>
+            {WHEEL_COLORS.map((color, i) => {
+              const thetaLength = (Math.PI * 2) / WHEEL_COLORS.length
+              return (
+                <mesh key={color} rotation-y={i * thetaLength} castShadow>
+                  <cylinderGeometry args={[1.24, 1.24, 0.04, 4, 1, false, 0, thetaLength]} />
+                  <Mat color={color} />
+                </mesh>
+              )
+            })}
+          </group>
+        </group>
+      </group>
     </group>
   )
 }

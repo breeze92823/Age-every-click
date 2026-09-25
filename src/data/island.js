@@ -64,7 +64,7 @@ export const AGE_MACHINES = {
 export const FREE_BOOTH = { x: -3, z: -20 }
 export const SIGN_BOARD = { x: 4, z: -20, yaw: -0.35 }
 export const SHOP = { x: -2.5, z: 1 }
-export const STATUE = { x: 5, z: 1, yaw: -0.5 }
+export const STATUE = { x: 5, z: 1, yaw: 0.1 + Math.PI }
 export const PETS = { x: 19.5, z: -25 }
 
 // Temporarily hidden (not yet content-ready) — the "FREE"/"SHOP"/"PETS"
