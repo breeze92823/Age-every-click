@@ -36,11 +36,11 @@ export const LEVEL_MAX = 50_000
 // exactly on AGE_MAX — a smooth idle-game curve rather than 50,000 more
 // hand-picked numbers.
 export const AGE_MAX = 40_000_000_000
-const AGE_SEED_MILESTONES = [0, 5, 18, 30, 45, 100]
+const AGE_SEED_MILESTONES = [0, 5, 18, 30, 45, 70, 100]
 const AGE_SEED_LEVEL_MAX = AGE_SEED_MILESTONES.length - 1
 
 // A constant-ratio (`round(100 * ratio^n)`) curve grows so slowly right
-// after level 5 that dozens of consecutive levels round to the exact same
+// after level 6 that dozens of consecutive levels round to the exact same
 // Age (100) before the exponential catches up — bad two ways: (a) those
 // levels get crossed in one silent jump instead of feeling like a
 // continuation of the hand-picked pattern, and (b) forcing a minimum +1-Age
@@ -50,7 +50,7 @@ const AGE_SEED_LEVEL_MAX = AGE_SEED_MILESTONES.length - 1
 //
 // A power-law curve (`100 * x^p`) has no such flat spot: its *relative*
 // growth per level tapers smoothly and continuously from big early jumps
-// (level 6 lands a few hundred past 100, echoing the seed's own 45→100
+// (level 7 lands a few hundred past 100, echoing the seed's own 70→100
 // jump) down toward tiny long-tail steps, while its *absolute* step size
 // keeps rising (p > 1 makes it convex) — so no level ever needs a floor
 // clamp, and there's no seam where the pace visibly changes gears.
