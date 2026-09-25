@@ -10,6 +10,8 @@
 import { GAME_SLUG, SETTINGS } from '../data/bloxity.js'
 import { setSensitivity } from './cameraOrbit.js'
 import { settings, setSetting, subscribe as subscribeSettings } from './settingsState.js'
+import { resetPlayer } from './playerState.js'
+import { SPAWN } from '../data/world.js'
 import * as session from './session.js'
 import * as audio from './audio.js'
 import * as sfx from './sfx.js'
@@ -182,6 +184,16 @@ export function init() {
 
     unsubscribers.push(SDK.auth.onUserChanged(onUser))
 
+    // 'chat_message_sent' and 'pointer_lock_changed' have no handler because
+    // this template has no chat and never requests pointer lock; only
+    // 'respawn_request' (fired by the portal's own pause-menu button) maps
+    // to something real here.
+    unsubscribers.push(
+      SDK.player.onEvent((event) => {
+        if (event === 'respawn_request') resetPlayer(SPAWN)
+      }),
+    )
+
     unsubscribers.push(
       session.subscribe((event, payload) => {
         if (event === 'room') SDK.game.updateRoom(payload.roomId, payload.partyId)
@@ -283,6 +295,33 @@ export function onAvatarChanged(fn) {
   }
 }
 
+// { height, shoulderWidth, armLength, legOffsetX, torsoScaleX, neckHeight,
+// headScale }, all normalised around 1.0. systems/avatarLoader.js's
+// applyProportions() is what actually rescales the loaded rig.
+export function getProportions() {
+  const SDK = sdk()
+  if (!SDK) return null
+  try {
+    return SDK.avatar.getProportions()
+  } catch {
+    return null
+  }
+}
+
+// Fires when the player adjusts a proportion slider in the customizer.
+// Deliberately doesn't pass the callback's payload through — same rule as
+// auth: callers re-read via getProportions() instead of trusting a cached
+// value. No-op unsubscribe if the SDK or listener isn't available.
+export function onProportionsChanged(fn) {
+  const SDK = sdk()
+  if (!SDK || typeof SDK.avatar.onProportionsChanged !== 'function') return () => {}
+  try {
+    return SDK.avatar.onProportionsChanged(() => fn())
+  } catch {
+    return () => {}
+  }
+}
+
 // --- Social ---------------------------------------------------------------
 export async function inviteFriend(userId) {
   const SDK = sdk()
@@ -311,6 +350,19 @@ export function getInviteLink() {
 
 export async function refreshFriends() {
   return loadFriends(userGeneration)
+}
+
+// No "find a user" API is exposed anywhere in the SDK, so nothing in this
+// template can source a userId to call this with yet — kept ready for
+// whenever a friend-search UI exists, same as getStableUserId above.
+export async function sendFriendRequest(userId) {
+  const SDK = sdk()
+  if (!SDK) return { success: false, error: 'sdk unavailable' }
+  try {
+    return await SDK.social.sendFriendRequest(userId)
+  } catch (err) {
+    return { success: false, error: err?.message || 'request failed' }
+  }
 }
 
 export async function refreshBalance() {

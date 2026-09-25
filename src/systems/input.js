@@ -1,3 +1,5 @@
+import { showMenu } from './bloxity.js'
+
 // inputState: a keyboard turn (-1 A/Left .. +1 D/Right, consumed by
 // cameraOrbit to yaw the camera), a forward/back move flag (W/S, consumed
 // camera-relative by playerMovement), a mouse-drag look delta + wheel zoom
@@ -74,6 +76,7 @@ function onKeyDown(e) {
   if (e.repeat) return
   held.add(e.code)
   if (e.code === 'Space') inputState.jump = true
+  if (e.code === 'Escape') showMenu() // opens the portal's own pause menu
   recomputeMove()
   recomputeTurn()
 }

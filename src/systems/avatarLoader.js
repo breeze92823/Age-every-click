@@ -178,3 +178,33 @@ export async function assembleAvatar(equipped, { signal } = {}) {
 
   return root
 }
+
+// Rescales an already-assembled avatar per SDK.avatar.getProportions(). Safe
+// to call repeatedly (e.g. from onProportionsChanged) since it only mutates
+// existing bone transforms, no reload needed.
+//
+// Only `height`, `headScale`, `neckHeight` and `torsoScaleX` are applied —
+// each maps to one bone this codebase can already name with reasonable
+// confidence (same head/spine patterns attachAccessory above uses).
+// `shoulderWidth`, `armLength` and `legOffsetX` are left untouched: they'd
+// need distinguishing the left/right bone of a symmetric pair, and the SDK
+// doesn't document that naming convention — guessing wrong would silently
+// warp the mesh, which is worse than the slider having no visible effect.
+export function applyProportions(root, proportions) {
+  if (!root || !proportions) return
+
+  const height = Number.isFinite(proportions.height) ? proportions.height : 1
+  root.scale.set(1, height, 1)
+
+  const skeleton = findSkeleton(root)
+  if (!skeleton) return
+
+  const head = findBone(skeleton, /head/i)
+  if (head) head.scale.setScalar(Number.isFinite(proportions.headScale) ? proportions.headScale : 1)
+
+  const neck = findBone(skeleton, /neck/i)
+  if (neck) neck.scale.y = Number.isFinite(proportions.neckHeight) ? proportions.neckHeight : 1
+
+  const torso = findBone(skeleton, /spine|chest|torso/i)
+  if (torso) torso.scale.x = Number.isFinite(proportions.torsoScaleX) ? proportions.torsoScaleX : 1
+}

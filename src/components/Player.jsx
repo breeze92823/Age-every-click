@@ -3,8 +3,8 @@ import { useFrame } from '@react-three/fiber'
 import { Quaternion, Vector3 } from 'three'
 import { player } from '../systems/playerState.js'
 import { MATERIAL_PBR } from '../data/materials.js'
-import { authState, getEquippedAvatar, onAvatarChanged } from '../systems/bloxity.js'
-import { assembleAvatar } from '../systems/avatarLoader.js'
+import { authState, getEquippedAvatar, getProportions, onAvatarChanged, onProportionsChanged } from '../systems/bloxity.js'
+import { applyProportions, assembleAvatar } from '../systems/avatarLoader.js'
 import { useAuth } from './hud/hooks.js'
 
 const _up = new Vector3(0, 1, 0)
@@ -50,21 +50,29 @@ function useBloxityAvatar() {
 
     let cancelled = false
     const controller = new AbortController()
+    let current = null
 
     async function load() {
       const equipped = getEquippedAvatar()
       if (!equipped) return
       const group = await assembleAvatar(equipped, { signal: controller.signal })
-      if (!cancelled && group) setAvatar(group)
+      if (cancelled || !group) return
+      current = group
+      applyProportions(current, getProportions())
+      setAvatar(group)
     }
     load()
 
-    const off = onAvatarChanged(() => load())
+    const offAvatar = onAvatarChanged(() => load())
+    const offProportions = onProportionsChanged(() => {
+      if (current) applyProportions(current, getProportions())
+    })
 
     return () => {
       cancelled = true
       controller.abort()
-      off()
+      offAvatar()
+      offProportions()
     }
   }, [signedIn])
 
