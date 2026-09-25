@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <title>Age Every Click</title>
+    <!-- Bloxity (Legion) SDK. A classic script, so window.Legion exists before
+         /src/main.jsx runs. If this fails to load the scene still boots: every
+         call goes through src/systems/bloxity.js, which no-ops without it. -->
+    <script src="https://sdk.bloxity.io/legion-sdk.min.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
