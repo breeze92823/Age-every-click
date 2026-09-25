@@ -38,40 +38,67 @@ export const LEVEL_MAX = 50_000
 export const AGE_MAX = 40_000_000_000
 const AGE_SEED_MILESTONES = [0, 5, 18, 30, 45, 100]
 const AGE_SEED_LEVEL_MAX = AGE_SEED_MILESTONES.length - 1
-const AGE_GROWTH_RATIO = Math.pow(
-  AGE_MAX / AGE_SEED_MILESTONES[AGE_SEED_LEVEL_MAX],
-  1 / (LEVEL_MAX - AGE_SEED_LEVEL_MAX),
-)
+
+// A pure `round(100 * ratio^n)` curve grows so slowly right after level 5
+// that dozens of consecutive levels round to the exact same Age (100) before
+// the exponential catches up — those levels would all be crossed in one
+// jump instead of feeling like a continuation of the hand-picked pattern.
+// Solving for the smallest ratio whose *floor-clamped* growth (never less
+// than +1 Age per level) still reaches AGE_MAX by LEVEL_MAX keeps every
+// level's milestone strictly greater than the last.
+function solveAgeGrowthRatio() {
+  const finalMilestone = (ratio) => {
+    let v = AGE_SEED_MILESTONES[AGE_SEED_LEVEL_MAX]
+    for (let n = AGE_SEED_LEVEL_MAX + 1; n <= LEVEL_MAX; n++) {
+      v = Math.max(Math.round(v * ratio), v + 1)
+    }
+    return v
+  }
+  let lo = 1
+  let hi = 2
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2
+    if (finalMilestone(mid) >= AGE_MAX) hi = mid
+    else lo = mid
+  }
+  return hi
+}
+
+const AGE_GROWTH_RATIO = solveAgeGrowthRatio()
+
+// Precomputed whole-Age threshold for every level 0..LEVEL_MAX: the seed
+// curve up to level 5 (age 100), then the strictly-increasing growth above,
+// clamped to land exactly on AGE_MAX at LEVEL_MAX. Built once at module
+// load so ageMilestone/levelForAge are cheap O(1)/O(log n) lookups instead
+// of replaying the growth from level 5 on every call.
+const AGE_MILESTONES = (() => {
+  const arr = new Array(LEVEL_MAX + 1)
+  for (let n = 0; n <= AGE_SEED_LEVEL_MAX; n++) arr[n] = AGE_SEED_MILESTONES[n]
+  for (let n = AGE_SEED_LEVEL_MAX + 1; n < LEVEL_MAX; n++) {
+    arr[n] = Math.max(Math.round(arr[n - 1] * AGE_GROWTH_RATIO), arr[n - 1] + 1)
+  }
+  arr[LEVEL_MAX] = AGE_MAX
+  return arr
+})()
 
 // The whole-Age threshold at which `level` is reached. ageMilestone(0) === 0.
 export function ageMilestone(level) {
   const n = clamp(Math.floor(level), LEVEL_MIN, LEVEL_MAX)
-  if (n <= AGE_SEED_LEVEL_MAX) return AGE_SEED_MILESTONES[n]
-  if (n >= LEVEL_MAX) return AGE_MAX
-  return Math.round(AGE_SEED_MILESTONES[AGE_SEED_LEVEL_MAX] * Math.pow(AGE_GROWTH_RATIO, n - AGE_SEED_LEVEL_MAX))
+  return AGE_MILESTONES[n]
 }
 
 // Inverse of ageMilestone: the highest level whose milestone Age has already
 // been reached.
 export function levelForAge(age) {
   const a = clamp(Math.floor(age), 0, AGE_MAX)
-  if (a < AGE_SEED_MILESTONES[AGE_SEED_LEVEL_MAX]) {
-    let n = 0
-    for (let i = AGE_SEED_LEVEL_MAX; i >= 0; i--) {
-      if (a >= AGE_SEED_MILESTONES[i]) {
-        n = i
-        break
-      }
-    }
-    return n
+  let lo = 0
+  let hi = LEVEL_MAX
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1
+    if (AGE_MILESTONES[mid] <= a) lo = mid
+    else hi = mid - 1
   }
-  let n = AGE_SEED_LEVEL_MAX + Math.floor(Math.log(a / AGE_SEED_MILESTONES[AGE_SEED_LEVEL_MAX]) / Math.log(AGE_GROWTH_RATIO))
-  n = clamp(n, AGE_SEED_LEVEL_MAX, LEVEL_MAX)
-  // ageMilestone rounds, so the log-based estimate can land one level off —
-  // nudge it back onto the milestone that actually brackets `a`.
-  while (n < LEVEL_MAX && ageMilestone(n + 1) <= a) n++
-  while (n > AGE_SEED_LEVEL_MAX && ageMilestone(n) > a) n--
-  return n
+  return lo
 }
 
 export const REBIRTH_INITIAL = envInt('VITE_REBIRTH_INITIAL', 0)
