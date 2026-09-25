@@ -19,10 +19,10 @@ export default function App() {
           toneMappingExposure: 1.4,
           outputColorSpace: SRGBColorSpace,
         }}
-        camera={{ fov: 55, near: 0.1, far: 200, position: [0, 6, 12] }}
+        camera={{ fov: 55, near: 0.1, far: 500, position: [0, 6, 12] }}
       >
         <color attach="background" args={['#bcdcff']} />
-        <fog attach="fog" args={['#bcdcff', 40, 100]} />
+        <fog attach="fog" args={['#bcdcff', 100, 300]} />
         <hemisphereLight args={['#eaf3ff', '#b7a98f', 1.4]} />
         <directionalLight
           position={[30, 45, 20]}

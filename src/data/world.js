@@ -14,7 +14,7 @@ export const ISLAND_DEPTH = 64
 // One knob for the size of everything on the island relative to the 1.8 m
 // player: data/island.js is authored at 1, and Island.jsx scales the whole
 // group about the walkable surface, so GROUND_Y never moves.
-export const ISLAND_SCALE = 1
+export const ISLAND_SCALE = 2
 
 // Walkable surface height/footprint — playerMovement.js clamps to this
 // directly, same flat-plane approach as before, just raised onto the island.

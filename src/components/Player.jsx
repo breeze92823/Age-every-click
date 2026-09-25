@@ -1,30 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { AnimationMixer, Quaternion, Vector3 } from 'three'
+import { Quaternion, Vector3 } from 'three'
 import { player } from '../systems/playerState.js'
 import { MATERIAL_PBR } from '../data/materials.js'
 import { authState, getEquippedAvatar, getProportions, onAvatarChanged, onProportionsChanged } from '../systems/bloxity.js'
 import { applyProportions, assembleAvatar } from '../systems/avatarLoader.js'
+import { makeGait, updateGait, disposeGait } from '../systems/avatarAnim.js'
 import { useAuth } from './hud/hooks.js'
 
 const _up = new Vector3(0, 1, 0)
 const _targetQuat = new Quaternion()
 const TURN_RATE = 0.001 // base of 1 - TURN_RATE^delta; smaller = snappier turn
-const WALK_SPEED_THRESHOLD = 0.15 // m/s — above this, play "walk" instead of "idle"
-const CROSSFADE = 0.15 // seconds
-
-// Matched against each clip's name (case-insensitive) rather than an exact
-// id — the SDK's own naming for the base rig's clips isn't documented, so
-// this takes the most plausible match per state rather than a confirmed one,
-// same spirit as avatarLoader.js's accessory bone matching.
-const CLIP_PATTERNS = {
-  idle: /idle/i,
-  walk: /walk|run/i,
-}
-
-function findClip(clips, pattern) {
-  return clips.find((c) => pattern.test(c.name)) || null
-}
 
 // Sentinel "nothing equipped" ids (see avatarCdn.js's isEquipped) — passing
 // this to assembleAvatar loads just the bare base rig from the CDN, which is
@@ -113,33 +99,18 @@ function useBloxityAvatar() {
 export default function Player() {
   const ref = useRef()
   const avatar = useBloxityAvatar()
-  const mixerRef = useRef(null)
-  const actionsRef = useRef({})
-  const activeActionRef = useRef(null)
+  const gaitRef = useRef(null)
 
-  // Rebuilt per loaded avatar — a mixer is bound to one root object, and the
-  // clips it carries (see avatarLoader.js) only exist once that root loads.
+  // Rebuilt per loaded avatar — the gait's cached bind-pose quaternions
+  // (see avatarAnim.js) belong to one specific rig instance.
   useEffect(() => {
-    mixerRef.current = null
-    actionsRef.current = {}
-    activeActionRef.current = null
+    gaitRef.current = null
     if (!avatar) return
-
-    const mixer = new AnimationMixer(avatar)
-    const clips = avatar.animations || []
-    const actions = {}
-    for (const [name, pattern] of Object.entries(CLIP_PATTERNS)) {
-      const clip = findClip(clips, pattern)
-      if (clip) actions[name] = mixer.clipAction(clip)
+    gaitRef.current = makeGait({ root: avatar, nodes: avatar.nodes || {}, clips: avatar.animations || [] })
+    return () => {
+      disposeGait(gaitRef.current)
+      gaitRef.current = null
     }
-    if (actions.idle) {
-      actions.idle.play()
-      activeActionRef.current = actions.idle
-    }
-    mixerRef.current = mixer
-    actionsRef.current = actions
-
-    return () => mixer.stopAllAction()
   }, [avatar])
 
   useFrame((_state, delta) => {
@@ -149,17 +120,10 @@ export default function Player() {
     _targetQuat.setFromAxisAngle(_up, player.facing)
     g.quaternion.slerp(_targetQuat, 1 - Math.pow(TURN_RATE, delta))
 
-    const mixer = mixerRef.current
-    if (!mixer) return
-    mixer.update(delta)
-
-    const actions = actionsRef.current
-    const moving = Math.hypot(player.velocity.x, player.velocity.z) > WALK_SPEED_THRESHOLD
-    const next = (moving && actions.walk) || actions.idle || null
-    if (next && next !== activeActionRef.current) {
-      next.reset().fadeIn(CROSSFADE).play()
-      activeActionRef.current?.fadeOut(CROSSFADE)
-      activeActionRef.current = next
+    const gait = gaitRef.current
+    if (gait) {
+      const speed01 = Math.hypot(player.velocity.x, player.velocity.z) / player.moveSpeed
+      updateGait(gait, Math.min(delta, 0.1), speed01, player.grounded)
     }
   })
 
