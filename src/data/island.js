@@ -65,6 +65,12 @@ export const FREE_BOOTH = { x: -3, z: -20 }
 export const SIGN_BOARD = { x: 4, z: -20, yaw: -0.35 }
 export const SHOP = { x: -2.5, z: 1 }
 export const STATUE = { x: 5, z: 1, yaw: 0.1 + Math.PI }
+// Marquee "Win" arrow beside the Statue, pointing at it. (x, z) is the sign's
+// centre on the ground; `y` is the arrow's centre height, and `poleDx` are the
+// two support poles' offsets along X (also their collision spots). `y` and
+// `poleDx` are in the sign's own unscaled units; `scale` sizes the whole sign
+// and `yaw` (radians, about Y) turns it.
+export const WIN_SIGN = { x: 7.7, z: -1.7, y: 1.9, poleDx: [-0.3, 1.1], scale: 1.5, yaw: Math.PI / 4 }
 export const PETS = { x: 19.5, z: -25 }
 
 // Temporarily hidden (not yet content-ready) — the "FREE"/"SHOP"/"PETS"

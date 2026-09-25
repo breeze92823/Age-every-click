@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { DoubleSide } from 'three'
+import { DoubleSide, ExtrudeGeometry, MeshStandardMaterial, Path, Shape, ShapeGeometry, SphereGeometry, Vector2 } from 'three'
 import { MATERIAL_PBR } from '../data/materials.js'
 import { GROUND_Y, ISLAND_SCALE } from '../data/world.js'
 import { AGE_MACHINES_TOP_Y } from '../systems/terrainHeight.js'
@@ -12,6 +12,7 @@ import {
   SIGN_BOARD,
   SHOP,
   STATUE,
+  WIN_SIGN,
   SPAWN_PAD,
   PETS,
   OBBY,
@@ -349,6 +350,157 @@ function Statue() {
   )
 }
 
+// Marquee arrow beside the Statue: a hollow red arrow frame ringed with
+// blinking bulbs, "Win" inside, pointing at the statue (-X) from two chrome
+// poles. Built tip-toward-+X then mirrored so it points the way it should.
+const ARROW_TAIL = -1.6
+const ARROW_HEAD_BASE = 0.8
+const ARROW_TIP = 1.7
+const ARROW_SHAFT_H = 0.3
+const ARROW_HEAD_H = 0.68
+const ARROW_BORDER = 0.08
+const ARROW_DEPTH = 0.16
+const ARROW_BEVEL = 0.02
+const ARROW_TILT = 0.12
+const BULB_SPACING = 0.32
+const BULB_COLOR = '#fff2b0'
+const FRAME_FRONT_Z = ARROW_DEPTH / 2 + ARROW_BEVEL
+
+// Counter-clockwise outline, mirrored so the tip points -X.
+const ARROW_OUTLINE = [
+  [ARROW_TAIL, -ARROW_SHAFT_H],
+  [ARROW_HEAD_BASE, -ARROW_SHAFT_H],
+  [ARROW_HEAD_BASE, -ARROW_HEAD_H],
+  [ARROW_TIP, 0],
+  [ARROW_HEAD_BASE, ARROW_HEAD_H],
+  [ARROW_HEAD_BASE, ARROW_SHAFT_H],
+  [ARROW_TAIL, ARROW_SHAFT_H],
+]
+  .map(([x, y]) => [-x, y])
+  .reverse()
+
+// Mitre-offsets a counter-clockwise polygon inward by d.
+function insetPolygon(pts, d) {
+  const n = pts.length
+  const lines = pts.map(([x0, y0], i) => {
+    const [x1, y1] = pts[(i + 1) % n]
+    const dx = x1 - x0
+    const dy = y1 - y0
+    const len = Math.hypot(dx, dy)
+    return { px: x0 - (dy / len) * d, py: y0 + (dx / len) * d, dx, dy }
+  })
+  return pts.map((_, i) => {
+    const a = lines[(i - 1 + n) % n]
+    const b = lines[i]
+    const t = ((b.px - a.px) * b.dy - (b.py - a.py) * b.dx) / (a.dx * b.dy - a.dy * b.dx)
+    return [a.px + a.dx * t, a.py + a.dy * t]
+  })
+}
+
+// Evenly spaced points around a closed polygon's edges (one per spacing).
+function pointsAlong(pts, spacing) {
+  const out = []
+  pts.forEach(([x0, y0], i) => {
+    const [x1, y1] = pts[(i + 1) % pts.length]
+    const steps = Math.max(1, Math.round(Math.hypot(x1 - x0, y1 - y0) / spacing))
+    for (let s = 0; s < steps; s++) out.push([x0 + ((x1 - x0) * s) / steps, y0 + ((y1 - y0) * s) / steps])
+  })
+  return out
+}
+
+const toVectors = (pts) => pts.map(([x, y]) => new Vector2(x, y))
+
+function WinSign() {
+  const { frameGeo, backingGeo, bulbs } = useMemo(() => {
+    const inner = insetPolygon(ARROW_OUTLINE, ARROW_BORDER)
+    const shape = new Shape(toVectors(ARROW_OUTLINE))
+    shape.holes.push(new Path(toVectors(inner)))
+    const frame = new ExtrudeGeometry(shape, {
+      depth: ARROW_DEPTH,
+      bevelEnabled: true,
+      bevelThickness: ARROW_BEVEL,
+      bevelSize: ARROW_BEVEL,
+      bevelSegments: 2,
+    })
+    frame.translate(0, 0, -ARROW_DEPTH / 2)
+    return {
+      frameGeo: frame,
+      backingGeo: new ShapeGeometry(new Shape(toVectors(inner))),
+      bulbs: pointsAlong(insetPolygon(ARROW_OUTLINE, ARROW_BORDER / 2), BULB_SPACING),
+    }
+  }, [])
+  const { texture: winTexture, aspect: winAspect } = useMemo(
+    () => makeLabelTexture('Win', { color: '#ffd23d', stroke: '#5a0d0d' }),
+    [],
+  )
+  // Even/odd bulbs share a material each, so the chase blink is two updates a frame.
+  const bulbMats = useMemo(
+    () => [0, 1].map(() => new MeshStandardMaterial({ color: BULB_COLOR, emissive: '#ffd86b', emissiveIntensity: 1 })),
+    [],
+  )
+  const bulbGeo = useMemo(() => new SphereGeometry(0.055, 10, 8), [])
+  useEffect(
+    () => () => {
+      frameGeo.dispose()
+      backingGeo.dispose()
+      winTexture.dispose()
+      bulbGeo.dispose()
+      bulbMats.forEach((m) => m.dispose())
+    },
+    [frameGeo, backingGeo, winTexture, bulbGeo, bulbMats],
+  )
+  useFrame(({ clock }) => {
+    const phase = Math.floor(clock.elapsedTime * 2.5) % 2
+    bulbMats.forEach((m, i) => {
+      m.emissiveIntensity = i === phase ? 2.2 : 0.5
+    })
+  })
+
+  const textHeight = 0.44
+  const textX = 0.4
+  const poleTop = (dx) => WIN_SIGN.y - ARROW_SHAFT_H + dx * Math.tan(ARROW_TILT) + 0.04
+  return (
+    <group position={[WIN_SIGN.x, GROUND_Y, WIN_SIGN.z]} scale={WIN_SIGN.scale} rotation-y={WIN_SIGN.yaw}>
+      {WIN_SIGN.poleDx.map((dx) => (
+        <group key={dx} position-x={dx}>
+          <mesh position-y={poleTop(dx) / 2} castShadow>
+            <cylinderGeometry args={[0.05, 0.05, poleTop(dx), 10]} />
+            <Mat color="#c9ced6" metalness={0.9} roughness={0.25} />
+          </mesh>
+          <mesh position-y={0.02} castShadow receiveShadow>
+            <cylinderGeometry args={[0.15, 0.17, 0.04, 16]} />
+            <Mat color="#c9ced6" metalness={0.9} roughness={0.25} />
+          </mesh>
+        </group>
+      ))}
+      <group position-y={WIN_SIGN.y} rotation-z={ARROW_TILT}>
+        <mesh geometry={frameGeo} castShadow>
+          <Mat color="#d4141c" metalness={0.3} roughness={0.35} />
+        </mesh>
+        <mesh geometry={backingGeo}>
+          <Mat color="#1a1220" side={DoubleSide} />
+        </mesh>
+        {[1, -1].map((side) => (
+          <mesh key={side} position={[textX, 0, side * 0.006]} rotation-y={side === 1 ? 0 : Math.PI}>
+            <planeGeometry args={[textHeight * winAspect, textHeight]} />
+            <meshBasicMaterial map={winTexture} transparent depthWrite={false} toneMapped={false} />
+          </mesh>
+        ))}
+        {[1, -1].map((side) =>
+          bulbs.map(([x, y], i) => (
+            <mesh
+              key={`${side}-${i}`}
+              geometry={bulbGeo}
+              material={bulbMats[i % 2]}
+              position={[x, y, side * (FRAME_FRONT_Z - 0.01)]}
+            />
+          )),
+        )}
+      </group>
+    </group>
+  )
+}
+
 function SpawnPad() {
   const spikes = 8
   return (
@@ -529,6 +681,7 @@ export default function IslandLandmarks() {
       <SignBoard />
       <Shop />
       <Statue />
+      <WinSign />
       <Pets />
       <Obby />
       {LEADERBOARDS.map((b) => (

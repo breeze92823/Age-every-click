@@ -160,6 +160,8 @@ function progressPayload() {
     ownedAuras: Array.from(s.ownedAuras),
     equippedAura: s.equippedAura,
     ownedAgeMachines: Array.from(s.ownedAgeMachines),
+    spins: s.spins,
+    speedCoil: s.speedCoil,
   }
 }
 
@@ -204,6 +206,8 @@ function onLocalStoreChangeProgress(state) {
     state.ownedHexPads.size,
     state.ownedAuras.size,
     state.ownedAgeMachines.size,
+    state.spins,
+    state.speedCoil,
   ])
   if (snap !== lastScheduledProgress) {
     lastScheduledProgress = snap

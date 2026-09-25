@@ -19,6 +19,15 @@ import { HEX_SPEED_PAD_TIERS } from '../data/hexPowerPad.js'
 import { AURA_TIERS, auraStrengthMultiplier } from '../data/aura.js'
 import { SHOP_ITEMS } from '../data/shop.js'
 import { AGE_MACHINES } from '../data/island.js'
+import {
+  WHEEL_PRIZES,
+  SPINS_INITIAL,
+  SPINS_MAX,
+  SPIN_PRICE_COINS,
+  SPEED_COIL_GAIN_MULTIPLIER,
+  SPEED_COIL_MIN_REBIRTH_EXCLUSIVE,
+  AGE_BOOST_MULTIPLIER,
+} from '../data/luckyWheel.js'
 
 // THE store — durable state + derive() + all actions. No middleware (no
 // persist, no immer, no subscribeWithSelector) — ported from Ice-Skate's
@@ -67,6 +76,75 @@ export const useGameStore = create((set, get) => ({
   // call adds that tier's Age/s to speed.
   ridingAgeMachine: null,
 
+  // Lucky Wheel (opened with E at the Statue). spins and speedCoil (the
+  // permanent x2 click gain) are
+  // durable; wheelOpen and ageBoostUntil (epoch ms the wheel's x2 Age boost
+  // runs out) are transient like ridingAgeMachine. While wheelOpen,
+  // playerMovement.js freezes the player.
+  spins: SPINS_INITIAL,
+  speedCoil: false,
+  wheelOpen: false,
+  ageBoostUntil: 0,
+
+  openWheel() {
+    set({ wheelOpen: true })
+  },
+
+  closeWheel() {
+    set({ wheelOpen: false })
+  },
+
+  // Called from components/hud/LuckyWheel.jsx's coins "+1 Spins" button.
+  // Returns whether the purchase went through.
+  buySpinWithCoins() {
+    const state = get()
+    if (state.coins < SPIN_PRICE_COINS || state.spins >= SPINS_MAX) return false
+    set((s) => ({ coins: s.coins - SPIN_PRICE_COINS, spins: s.spins + 1 }))
+    return true
+  },
+
+  // Spends one spin and rolls the prize against the slices' weights. Returns
+  // the WHEEL_PRIZES index, or -1 with no spin left. The prize is NOT applied
+  // here — the wheel calls claimWheelPrize once its spin animation lands.
+  // The Speed Coil slice only counts while the player has more than
+  // SPEED_COIL_MIN_REBIRTH_EXCLUSIVE Rebirths and doesn't own it yet; until
+  // then its weight is 0, so the other slices' odds just renormalise.
+  spinWheel() {
+    const state = get()
+    if (state.spins < 1) return -1
+    set((s) => ({ spins: s.spins - 1 }))
+    const coilEligible = state.rebirth > SPEED_COIL_MIN_REBIRTH_EXCLUSIVE && !state.speedCoil
+    const weights = WHEEL_PRIZES.map((p) => (p.kind === 'speedCoil' && !coilEligible ? 0 : p.weight))
+    let roll = Math.random() * weights.reduce((sum, w) => sum + w, 0)
+    for (let i = 0; i < weights.length; i++) {
+      roll -= weights[i]
+      if (roll < 0 && weights[i] > 0) return i
+    }
+    return weights.findLastIndex((w) => w > 0)
+  },
+
+  // Applies a rolled prize and returns the text to show the player.
+  claimWheelPrize(index) {
+    const prize = WHEEL_PRIZES[index]
+    if (!prize) return ''
+    switch (prize.kind) {
+      case 'age':
+        set((s) => derive({ ...s, speed: clamp(s.speed + prize.amount, SPEED_MIN, SPEED_MAX) }))
+        return `You won ${prize.amount.toLocaleString('en-US')} Age!`
+      case 'coins':
+        get().awardCoins(prize.amount)
+        return `You won ${prize.amount.toLocaleString('en-US')} Coins!`
+      case 'ageBoost':
+        set((s) => ({ ageBoostUntil: Math.max(Date.now(), s.ageBoostUntil) + prize.seconds * 1000 }))
+        return `You won x${AGE_BOOST_MULTIPLIER} Age for ${prize.seconds}s!`
+      case 'speedCoil':
+        set({ speedCoil: true })
+        return `You won x${SPEED_COIL_GAIN_MULTIPLIER} Click Gain forever!`
+      default:
+        return ''
+    }
+  },
+
   // Called from scenePortals.js's per-frame trigger check.
   setScene(scene) {
     set({ currentScene: scene })
@@ -74,15 +152,17 @@ export const useGameStore = create((set, get) => ({
 
   // One click's worth of Speed. `multiplier` defaults to 1 (kept for parity
   // with Ice-Skate's walking-tick call site, which passed a treadmill's x2/x3
-  // tier there) — speedPerGain * (rebirth + 1) * multiplier * aura strength,
-  // floored to a whole number. Returns the Speed actually added after the
+  // tier there) — speedPerGain * (rebirth + 1) * multiplier * aura strength
+  // * the Lucky Wheel's x2 boost while active * its permanent Speed Coil
+  // x2 once won, floored to a whole number. Returns the Speed actually added after the
   // SPEED_MAX clamp.
   gainSpeed(multiplier = 1) {
     let applied = 0
     set((state) => {
       const mult = multiplier > 0 ? multiplier : 1
       const auraMult = auraStrengthMultiplier(state.equippedAura)
-      const gain = Math.floor(state.speedPerGain * (state.rebirth + 1) * mult * auraMult)
+      const boostMult = (Date.now() < state.ageBoostUntil ? AGE_BOOST_MULTIPLIER : 1) * (state.speedCoil ? SPEED_COIL_GAIN_MULTIPLIER : 1)
+      const gain = Math.floor(state.speedPerGain * (state.rebirth + 1) * mult * auraMult * boostMult)
       const speed = clamp(state.speed + gain, SPEED_MIN, SPEED_MAX)
       applied = speed - state.speed
       return derive({ ...state, speed })
@@ -225,6 +305,9 @@ export const useGameStore = create((set, get) => ({
         ownedAuras: new Set(),
         equippedAura: null,
         ownedAgeMachines: new Set(),
+        spins: SPINS_INITIAL,
+        speedCoil: false,
+        ageBoostUntil: 0,
       }),
     )
   },
@@ -246,6 +329,8 @@ export const useGameStore = create((set, get) => ({
       const ownedAuras = new Set(Array.isArray(saved.ownedAuras) ? saved.ownedAuras : [])
       const equippedAura = ownedAuras.has(saved.equippedAura) ? saved.equippedAura : null
       const ownedAgeMachines = new Set(Array.isArray(saved.ownedAgeMachines) ? saved.ownedAgeMachines : [])
+      const spins = Number.isFinite(saved.spins) ? clamp(Math.floor(saved.spins), 0, SPINS_MAX) : s.spins
+      const speedCoil = typeof saved.speedCoil === 'boolean' ? saved.speedCoil : s.speedCoil
       const tier = HEX_SPEED_PAD_TIERS[equippedHexPad]
       return derive({
         ...s,
@@ -258,6 +343,8 @@ export const useGameStore = create((set, get) => ({
         ownedAuras,
         equippedAura,
         ownedAgeMachines,
+        spins,
+        speedCoil,
       })
     })
   },

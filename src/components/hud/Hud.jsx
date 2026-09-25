@@ -9,6 +9,7 @@ import { formatCompact } from '../../systems/format.js'
 import { resetPlayer } from '../../systems/playerState.js'
 import { SPAWN, ISLAND_SCALE } from '../../data/world.js'
 import { OBBY, AGE_MACHINES } from '../../data/island.js'
+import { AGE_BOOST_MULTIPLIER } from '../../data/luckyWheel.js'
 import { AGE_MACHINE_RADIUS } from '../../systems/ageMachineCollision.js'
 import { AGE_MACHINES_TOP_Y } from '../../systems/terrainHeight.js'
 import TouchControls from './TouchControls.jsx'
@@ -23,6 +24,7 @@ import ActionResult from './ActionResult.jsx'
 import ActionPopups from './ActionPopups.jsx'
 import BonusTimer from './BonusTimer.jsx'
 import InteractPrompt from './InteractPrompt.jsx'
+import LuckyWheel from './LuckyWheel.jsx'
 import { actionResultState } from '../../systems/actionResult.js'
 import { useSettings, useTouchMode } from './hooks.js'
 
@@ -259,6 +261,36 @@ function ToolbarButton({ icon, label, onClick, isTouch }) {
 // whenever the coin total goes up.
 const COIN_POP_MS = 260
 
+// "x2 Age 0:29" countdown for the Lucky Wheel's Age boost prize — renders
+// nothing once the store's ageBoostUntil has passed.
+function AgeBoostBadge() {
+  const until = useGameStore((s) => s.ageBoostUntil)
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    if (Date.now() >= until) return undefined
+    setNow(Date.now())
+    const id = setInterval(() => setNow(Date.now()), 250)
+    return () => clearInterval(id)
+  }, [until])
+
+  const remaining = Math.ceil((until - now) / 1000)
+  if (remaining <= 0) return null
+  const mm = Math.floor(remaining / 60)
+  const ss = String(remaining % 60).padStart(2, '0')
+  return (
+    <div
+      className="flex items-center gap-1.5 rounded-full border-2 border-black bg-black/60 px-3 py-1 text-base font-black text-lime-300"
+      style={{ WebkitTextStroke: '1px black', paintOrder: 'stroke fill' }}
+    >
+      <span aria-hidden="true">🚀</span>
+      <span>
+        x{AGE_BOOST_MULTIPLIER} Age {mm}:{ss}
+      </span>
+    </div>
+  )
+}
+
 // Right-edge, vertically centred: the coins count pill on its own.
 function RightCenterCoins() {
   const coins = useGameStore((s) => s.coins)
@@ -324,6 +356,7 @@ function RightCenterCoins() {
     return (
       <div data-hud="right-center" className="pointer-events-none absolute right-4 top-24 flex flex-col items-end gap-2">
         {coinsPill}
+        <AgeBoostBadge />
       </div>
     )
   }
@@ -331,6 +364,7 @@ function RightCenterCoins() {
   return (
     <div data-hud="right-center" className="pointer-events-none absolute right-4 top-1/2 flex -translate-y-1/2 flex-col items-center gap-3">
       {coinsPill}
+      <AgeBoostBadge />
     </div>
   )
 }
@@ -542,6 +576,10 @@ export default function Hud() {
       {/* Bottom-center "Press E to ..." pill — armed while standing on one
          of the island's obby entry pads (see systems/scenePortals.js). */}
       <InteractPrompt />
+
+      {/* Lucky Wheel popup — opened with E at the Statue (see
+         systems/statueInteract.js). Portals itself to document.body. */}
+      <LuckyWheel />
 
       {/* Full-screen "rotate to landscape" gate for touch sessions. Last
          child + highest z-index so it covers the touch controls while up. */}

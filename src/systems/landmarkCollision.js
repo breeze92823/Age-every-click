@@ -1,4 +1,16 @@
-import { FREE_BOOTH, SIGN_BOARD, SHOP, STATUE, PETS, LEADERBOARDS, TREES, BUSHES, ROCKS, OBBY } from '../data/island.js'
+import {
+  FREE_BOOTH,
+  SIGN_BOARD,
+  SHOP,
+  STATUE,
+  WIN_SIGN,
+  PETS,
+  LEADERBOARDS,
+  TREES,
+  BUSHES,
+  ROCKS,
+  OBBY,
+} from '../data/island.js'
 import { ISLAND_SCALE } from '../data/world.js'
 
 // Solid landmarks and large decor (trees/bushes/rocks) are static obstacles:
@@ -13,6 +25,11 @@ const OBSTACLES = [
   { x: SIGN_BOARD.x, z: SIGN_BOARD.z, radius: 1.5 },
   { x: SHOP.x, z: SHOP.z, radius: 2.0 },
   { x: STATUE.x, z: STATUE.z, radius: 1.1 },
+  ...WIN_SIGN.poleDx.map((dx) => ({
+    x: WIN_SIGN.x + dx * WIN_SIGN.scale * Math.cos(WIN_SIGN.yaw),
+    z: WIN_SIGN.z - dx * WIN_SIGN.scale * Math.sin(WIN_SIGN.yaw),
+    radius: 0.25 * WIN_SIGN.scale,
+  })),
   { x: PETS.x, z: PETS.z, radius: 1.1 },
   { x: PETS.x + 1.7, z: PETS.z - 1.6, radius: 0.9 },
   ...LEADERBOARDS.map((b) => ({ x: b.x, z: b.z, radius: 1.7 })),

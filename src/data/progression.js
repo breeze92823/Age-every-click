@@ -22,7 +22,7 @@ export const SPEED_MAX = 1_000_000_000_000
 // system. Read directly by systems/playerMovement.js and used to seed
 // systems/playerState.js's initial value. Unrelated to the Speed stat/level
 // above.
-export const PLAYER_MOVE_SPEED = 6
+export const PLAYER_MOVE_SPEED = 9
 
 export const LEVEL_INITIAL = 0
 export const LEVEL_MIN = 0
