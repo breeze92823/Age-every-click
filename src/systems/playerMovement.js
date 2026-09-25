@@ -1,12 +1,14 @@
 import { inputState } from './input.js'
 import { player } from './playerState.js'
 import { getYaw } from './cameraOrbit.js'
-import { GROUND_Y } from '../data/world.js'
 import { PLAYER_MOVE_SPEED } from '../data/progression.js'
+import { terrainHeightAt } from './terrainHeight.js'
+import { conveyorPushAt } from './conveyor.js'
 
 // Kinematic capsule, stepped once per frame: apply input -> gravity ->
-// integrate -> clamp to the ground plane. No collider list beyond the flat
-// ground — this template has nothing else to collide with.
+// integrate -> clamp to the ground height under the player's feet. Ground
+// height is a lookup rather than a flat plane, so low steps (the enclosure
+// curbs) are climbed automatically instead of being clipped through.
 
 const ACCEL = 45 // m/s^2 approach toward target velocity
 const GRAVITY = -22 // m/s^2
@@ -68,10 +70,21 @@ export function step(dt) {
   p.y += player.velocity.y * dt
   p.z += player.velocity.z * dt
 
-  if (p.y <= GROUND_Y) {
-    p.y = GROUND_Y
+  const groundY = terrainHeightAt(p.x, p.z)
+  if (p.y <= groundY) {
+    p.y = groundY
     if (player.velocity.y < 0) player.velocity.y = 0
     player.grounded = true
+  }
+
+  // Standing on a curb ring carries the player along with its chevrons,
+  // on top of whatever input velocity already moved them this frame.
+  if (player.grounded) {
+    const push = conveyorPushAt(p.x, p.z)
+    if (push) {
+      p.x += push.x * dt
+      p.z += push.z * dt
+    }
   }
 
   // Face the direction of travel.

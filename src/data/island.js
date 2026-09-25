@@ -22,6 +22,11 @@ export const ENCLOSURES = [
   [-11, -4, 11, 7],
 ]
 export const ENCLOSURE_BORDER = 1.2
+// Curb ring height and grass-bed depth, both above GROUND_Y (local, i.e.
+// pre-ISLAND_SCALE) — shared by the island mesh and by terrainHeight.js,
+// which turns them into a physical step the player climbs instead of clipping.
+export const CURB_HEIGHT = 0.14
+export const BED_DEPTH = 0.03
 
 export const SPAWN_PAD = { x: SPAWN.x / ISLAND_SCALE, z: SPAWN.z / ISLAND_SCALE }
 
