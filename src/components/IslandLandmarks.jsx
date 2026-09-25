@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useFrame } from '@react-three/fiber'
 import { DoubleSide } from 'three'
 import { MATERIAL_PBR } from '../data/materials.js'
 import { GROUND_Y, ISLAND_SCALE } from '../data/world.js'
 import { AGE_MACHINES_TOP_Y } from '../systems/terrainHeight.js'
 import { resetPlayer } from '../systems/playerState.js'
+import { getLastBounceAt } from '../systems/trampoline.js'
 import {
   AGE_MACHINES,
   FREE_BOOTH,
@@ -32,6 +34,7 @@ import { formatShort } from '../data/format.js'
 import { useGameStore } from '../store/useGameStore.js'
 import { getLeaderboard, subscribe as subscribeNet } from '../systems/net.js'
 import { playButtonClick, playActionFail } from '../systems/sfx.js'
+import { showActionResult } from '../systems/actionResult.js'
 
 // The hub's set pieces, laid out per data/island.js. Everything faces +Z,
 // toward the spawn camera. Heights are in metres against the 1.8 m player.
@@ -119,7 +122,7 @@ function OwnedTag({ position }) {
 // Once owned, "Use" teleports the player onto the machine's stand and locks
 // them there (see useGameStore's enterAgeMachine/ridingAgeMachine and
 // playerMovement.js's freeze) until they tap the Return button.
-function BuyButton({ index, owned, position }) {
+function BuyButton({ index, owned, price, position }) {
   const buyAgeMachine = useGameStore((s) => s.buyAgeMachine)
   const enterAgeMachine = useGameStore((s) => s.enterAgeMachine)
   const label = owned ? 'Use' : 'Buy'
@@ -140,6 +143,8 @@ function BuyButton({ index, owned, position }) {
           }
         } else if (buyAgeMachine(index)) {
           playButtonClick()
+        } else if (price != null) {
+          showActionResult(`Need ${formatCompact(price)} Coins to Buy`, false)
         } else {
           playActionFail()
         }
@@ -224,7 +229,7 @@ function AgeMachines() {
                 ) : (
                   <PriceTag text={t.priceLabel ?? formatCompact(t.price)} position={[x, 1.95, GLASS_RADIUS + 0.4]} />
                 )}
-                <BuyButton index={i} owned={owned} position={[x, 1.55, GLASS_RADIUS + 0.1]} />
+                <BuyButton index={i} owned={owned} price={t.price} position={[x, 1.55, GLASS_RADIUS + 0.1]} />
               </>
             )}
           </group>
@@ -412,7 +417,9 @@ function useLeaderboardRows(stat) {
 // our own row — same "never blocks, never intrudes" stance as the rest of
 // the netcode. The "Top Age" board (`stat === 'speed'`) prefixes its values
 // with "Age " to match the HUD's own "Age: N" convention (components/hud/
-// LevelBar.jsx); "Top Coins" shows the bare formatted number.
+// LevelBar.jsx); "Top Coins" shows the bare formatted number. Each row's
+// `isSelf` (the local player vs. every other, remote player) rides through
+// to makeLeaderboardTexture so it can highlight our own row on the board.
 function Leaderboard({ x, z, title, color, stat }) {
   const rows = useLeaderboardRows(stat)
   const entries = useMemo(
@@ -420,10 +427,14 @@ function Leaderboard({ x, z, title, color, stat }) {
       rows.map((row) => ({
         name: row.name,
         value: stat === 'speed' ? `Age ${formatShort(row.value)}` : formatShort(row.value),
+        isSelf: row.isSelf,
       })),
     [rows, stat],
   )
-  const texture = useMemo(() => makeLeaderboardTexture(entries, { accent: color }), [entries, color])
+  const texture = useMemo(
+    () => makeLeaderboardTexture(entries, { accent: color, slots: LEADERBOARD_VISIBLE_ROWS }),
+    [entries, color],
+  )
   useEffect(() => () => texture.dispose(), [texture])
   return (
     <group position={[x, GROUND_Y, z]} rotation={[0, Math.PI, 0]}>
@@ -440,8 +451,20 @@ function Leaderboard({ x, z, title, color, stat }) {
   )
 }
 
+const BED_Y = 0.5
+const BED_DIP = 0.18 // m the bed sinks at the moment of a bounce
+const BED_DIP_MS = 350
+
 function Trampoline() {
   const { x, z, radius } = TRAMPOLINE
+  const bed = useRef()
+
+  // Dips the bed on each bounce and eases it back up.
+  useFrame(() => {
+    const t = (performance.now() - getLastBounceAt()) / BED_DIP_MS
+    bed.current.position.y = t < 1 ? BED_Y - BED_DIP * (1 - t) ** 2 : BED_Y
+  })
+
   return (
     <group position={[x, GROUND_Y, z]}>
       {[0, 1, 2, 3].map((i) => {
@@ -453,7 +476,7 @@ function Trampoline() {
           </mesh>
         )
       })}
-      <mesh position-y={0.5} receiveShadow>
+      <mesh ref={bed} position-y={BED_Y} receiveShadow>
         <cylinderGeometry args={[radius - 0.05, radius - 0.05, 0.05, 32]} />
         <Mat color="#1c1e24" />
       </mesh>

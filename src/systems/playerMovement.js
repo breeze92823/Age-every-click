@@ -2,6 +2,7 @@ import { inputState } from './input.js'
 import { player, resetPlayer } from './playerState.js'
 import { getYaw } from './cameraOrbit.js'
 import { PLAYER_MOVE_SPEED } from '../data/progression.js'
+import { SPAWN, WATER_DEATH_Y } from '../data/world.js'
 import { terrainHeightAt } from './terrainHeight.js'
 import { conveyorPushAt } from './conveyor.js'
 import { resolveAgeMachineCollision } from './ageMachineCollision.js'
@@ -13,6 +14,8 @@ import { tsunamiGroundAt, resolveTsunamiWalls, stepTsunami, resetTsunami } from 
 import { syncYawToPlayer } from './cameraOrbit.js'
 import { useGameStore } from '../store/useGameStore.js'
 import { setInteractPrompt } from './interactPrompt.js'
+import { resolveTrampolineWall, trampolineGroundAt, bounceSpeed, resetBounceChain } from './trampoline.js'
+import { playActionFail } from './sfx.js'
 
 // Kinematic capsule, stepped once per frame: apply input -> gravity ->
 // integrate -> clamp to the ground height under the player's feet. Ground
@@ -113,6 +116,7 @@ export function step(dt) {
   player.grounded = false
 
   const prevX = p.x
+  const prevY = p.y
   const prevZ = p.z
   player.velocity.y += GRAVITY * dt
   p.x += player.velocity.x * dt
@@ -124,6 +128,7 @@ export function step(dt) {
     const blocked2 = resolveLandmarkCollision(blocked.x, blocked.z, player.dims.radius)
     p.x = blocked2.x
     p.z = blocked2.z
+    resolveTrampolineWall(prevY, p, player.dims.radius)
   } else if (onStudJumps) {
     resolveStudJumpsWalls(prevX, prevZ, p, player.dims.radius)
   } else if (onTsunami) {
@@ -133,18 +138,27 @@ export function step(dt) {
   // The Bonus and Stud Jumps scenes have real gaps: their ground is
   // -Infinity over the void, and a player already falling past a surface's
   // top can't snap back up onto it from below.
-  const groundY = onIsland
-    ? terrainHeightAt(p.x, p.z)
-    : onBonus
-      ? bonusGroundAt(p.x, p.z)
-      : onStudJumps
-        ? studJumpsGroundAt(p.x, p.z, player.dims.radius)
-        : tsunamiGroundAt(p.x, p.z, player.dims.radius)
+  const trampolineY = onIsland ? trampolineGroundAt(prevY, p.x, p.z) : null
+  const groundY =
+    trampolineY ??
+    (onIsland
+      ? terrainHeightAt(p.x, p.z)
+      : onBonus
+        ? bonusGroundAt(p.x, p.z)
+        : onStudJumps
+          ? studJumpsGroundAt(p.x, p.z, player.dims.radius)
+          : tsunamiGroundAt(p.x, p.z, player.dims.radius))
   const canLand = onIsland || p.y >= groundY - STEP_TOLERANCE
   if (p.y <= groundY && canLand) {
     p.y = groundY
-    if (player.velocity.y < 0) player.velocity.y = 0
-    player.grounded = true
+    if (trampolineY != null) {
+      // Never rests on the bed: every touchdown launches the next bounce.
+      player.velocity.y = bounceSpeed(-GRAVITY)
+    } else {
+      if (player.velocity.y < 0) player.velocity.y = 0
+      player.grounded = true
+      resetBounceChain()
+    }
   }
 
   // Standing on a curb ring carries the player along with its chevrons,
@@ -155,6 +169,18 @@ export function step(dt) {
       p.x += push.x * dt
       p.z += push.z * dt
     }
+  }
+
+  // Walked off the island's grass edge: terrainHeightAt returns -Infinity
+  // out there, so gravity just keeps pulling the player down past the water
+  // surface. Once they've sunk far enough, count it as drowning and send
+  // them back to spawn, same "reset on fall" treatment as the obby scenes'
+  // voids.
+  if (onIsland && p.y < WATER_DEATH_Y) {
+    playActionFail()
+    resetPlayer(SPAWN)
+    syncYawToPlayer()
+    return
   }
 
   // Face the direction of travel.

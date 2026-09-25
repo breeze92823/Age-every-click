@@ -1,9 +1,11 @@
-// Top-center popup that surfaces the result of an action attempt — success
-// (green) or failure (red, with the reason). Driven imperatively via
+// Bottom-center popup that surfaces the result of an action attempt —
+// success (green) or failure (red, with the reason). Driven imperatively via
 // `show(text, success)`, polled from systems/actionResult.js's
 // showActionResult() singleton at Hud.jsx's usual ~10Hz cadence — never a
-// per-frame re-render. Ported verbatim from Ice-Skate's
-// components/hud/ActionResult.jsx.
+// per-frame re-render. Adapted from Ice-Skate's components/hud/ActionResult.jsx
+// (which anchors it top-center); moved to the bottom here per request, clear
+// of ReturnButton's bottom-6 slot (the two never show at once — Buy failures
+// only fire while not riding a machine).
 import { forwardRef, useImperativeHandle, useRef } from 'react'
 
 // Pop in with a slight overshoot, hold, then shrink back out.
@@ -37,7 +39,7 @@ const ActionResult = forwardRef(function ActionResult(_props, ref) {
     <div
       ref={rootRef}
       data-hud="action-result"
-      className="pointer-events-none absolute left-1/2 top-16 flex -translate-x-1/2 flex-col items-center gap-1"
+      className="pointer-events-none absolute left-1/2 bottom-16 flex -translate-x-1/2 flex-col items-center gap-1"
       style={{ display: 'none', zIndex: 60 }}
     >
       <div

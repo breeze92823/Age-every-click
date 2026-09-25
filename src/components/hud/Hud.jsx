@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { settings } from '../../systems/settingsState.js'
 import { playButtonClick, playButtonHover } from '../../systems/sfx.js'
@@ -23,6 +23,7 @@ import ActionResult from './ActionResult.jsx'
 import ActionPopups from './ActionPopups.jsx'
 import BonusTimer from './BonusTimer.jsx'
 import InteractPrompt from './InteractPrompt.jsx'
+import { actionResultState } from '../../systems/actionResult.js'
 import { useSettings, useTouchMode } from './hooks.js'
 
 // This Hud is ported from Ice-Skate's components/hud/Hud.jsx: same LevelBar/
@@ -444,6 +445,17 @@ export default function Hud() {
     backgroundColor: `rgba(0, 0, 0, ${(settings.background_transparency * 0.4).toFixed(3)})`,
   }
 
+  const actionResultRef = useRef(null)
+  useEffect(() => {
+    let lastId = actionResultState.id
+    const intervalId = setInterval(() => {
+      if (actionResultState.id === lastId) return
+      lastId = actionResultState.id
+      actionResultRef.current?.show(actionResultState.text, actionResultState.success)
+    }, 100)
+    return () => clearInterval(intervalId)
+  }, [])
+
   return (
     <div className="pointer-events-none absolute inset-0 p-4 font-mono text-xs leading-5 text-slate-200">
       {/* First child: the touch look-zone/stick paint beneath the
@@ -460,11 +472,11 @@ export default function Hud() {
 
       <AuthPanel panelStyle={panelStyle} />
 
-      {/* Top-centre buy/equip result popup — green on success, red with the
-         reason on failure. Driven imperatively; nothing calls it yet in
-         this template (no gated purchase can fail silently the way
-         Ice-Skate's held-E actions could), kept wired for parity. */}
-      <ActionResult />
+      {/* Bottom-centre buy/equip result popup — green on success, red with the
+         reason on failure. Driven imperatively via actionResultRef; used by
+         IslandLandmarks.jsx's Age Machine BuyButton to report "Need N Coins
+         to Buy" when a purchase is attempted without enough coins. */}
+      <ActionResult ref={actionResultRef} />
 
       {/* Top-centre level progress bar. DOM sibling of the canvas. */}
       <LevelBar />

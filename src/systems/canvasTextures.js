@@ -220,10 +220,25 @@ export function makeStatusTagTexture(text, { px = 96 } = {}) {
   return { texture, aspect: w / h }
 }
 
+// Self row's highlight stripe + name tint — a "that's you" cue picking the
+// local player's row out from every other (remote/saved) row on the board,
+// same idea as Ice-Skate's own LeaderboardSign self-highlight.
+const SELF_ROW_BG = 'rgba(57, 255, 136, 0.22)'
+const SELF_NAME_COLOR = '#8dffb0'
+
 // Ranked rows of name + value baked onto a wood-plaque backing — the
-// leaderboard signboards' plaque texture. `entries` is ordered best-first;
-// top 3 ranks get a medal-tint number.
-export function makeLeaderboardTexture(entries, { accent = '#ffd23d', w = 600, h = 400 } = {}) {
+// leaderboard signboards' plaque texture. `entries` is ordered best-first,
+// each `{ name, value, isSelf }` — `isSelf` (systems/net.js's getLeaderboard()
+// flag) highlights the local player's own row so it reads apart from every
+// remote player's row at a glance. `slots` reserves row height for a fixed
+// number of rows (defaulting to entries.length for backward compatibility)
+// rather than sizing rows to however many entries happen to be passed —
+// components/IslandLandmarks.jsx always passes its live board's full
+// LEADERBOARD_VISIBLE_ROWS here, so a solo/offline board showing just the
+// local player's own row still draws one properly-proportioned row (leaving
+// the rest of the plaque blank) instead of stretching that lone row to fill
+// the whole board.
+export function makeLeaderboardTexture(entries, { accent = '#ffd23d', w = 600, h = 400, slots } = {}) {
   const canvas = document.createElement('canvas')
   canvas.width = w
   canvas.height = h
@@ -234,14 +249,17 @@ export function makeLeaderboardTexture(entries, { accent = '#ffd23d', w = 600, h
 
   const padX = w * 0.06
   const padY = h * 0.05
-  const rowH = (h - padY * 2) / entries.length
+  const rowH = (h - padY * 2) / (slots || entries.length || 1)
   const rankColors = ['#ffd54a', '#d8dce3', '#e08a3c']
 
   g.textBaseline = 'middle'
   entries.forEach((entry, i) => {
     const rowY = padY + rowH * i
     const y = rowY + rowH / 2
-    if (i % 2 === 1) {
+    if (entry.isSelf) {
+      g.fillStyle = SELF_ROW_BG
+      g.fillRect(padX * 0.4, rowY, w - padX * 0.8, rowH)
+    } else if (i % 2 === 1) {
       g.fillStyle = 'rgba(255, 255, 255, 0.06)'
       g.fillRect(padX * 0.4, rowY, w - padX * 0.8, rowH)
     }
@@ -253,7 +271,7 @@ export function makeLeaderboardTexture(entries, { accent = '#ffd23d', w = 600, h
     g.fillText(`${i + 1}.`, padX, y)
 
     g.font = `700 ${fontSize * 0.9}px ${LABEL_FONT}`
-    g.fillStyle = '#f4ead2'
+    g.fillStyle = entry.isSelf ? SELF_NAME_COLOR : '#f4ead2'
     g.fillText(entry.name, padX + fontSize * 1.6, y)
 
     g.textAlign = 'right'

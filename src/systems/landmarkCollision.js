@@ -5,8 +5,8 @@ import { ISLAND_SCALE } from '../data/world.js'
 // the player collides with them and gets pushed out, same horizontal
 // push-out as ageMachineCollision.js. Left out on purpose because they're
 // walkover platforms, not solid bodies: SpawnPad, the Obby pads (the course
-// only works if you can stand on them) and the Trampoline (for once it gets
-// a bounce). Also left out: Flowers (too small to matter) and the enclosure
+// only works if you can stand on them) and the Trampoline, which has its own
+// wall + bounce handling in trampoline.js. Also left out: Flowers (too small to matter) and the enclosure
 // curbs, which conveyor.js already documents as walkable, not blocking.
 const OBSTACLES = [
   { x: FREE_BOOTH.x, z: FREE_BOOTH.z, radius: 1.6 },

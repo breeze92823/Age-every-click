@@ -1,5 +1,5 @@
 import { GROUND_Y, ISLAND_SCALE } from '../data/world.js'
-import { ENCLOSURES, ENCLOSURE_BORDER, CURB_HEIGHT, BED_DEPTH, AGE_MACHINES } from '../data/island.js'
+import { ENCLOSURES, ENCLOSURE_BORDER, CURB_HEIGHT, BED_DEPTH, AGE_MACHINES, GRASS_RECTS } from '../data/island.js'
 
 // The curb ring around each grass enclosure is a physical step, not just a
 // texture: playerMovement.js reads this instead of a flat GROUND_Y so
@@ -22,6 +22,15 @@ const AGE_MACHINES_HALF_D = AGE_MACHINES.standDepth / 2
 // stand top when they enter a machine, without re-deriving the math.
 export const AGE_MACHINES_TOP_Y = GROUND_Y + AGE_MACHINES.standHeight * ISLAND_SCALE
 
+// True past the island's grass edge — no ground there, just open air down
+// to the water, so playerMovement.js lets gravity carry the player off it.
+function offIsland(lx, lz) {
+  for (const [x0, z0, x1, z1] of GRASS_RECTS) {
+    if (lx >= x0 && lx <= x1 && lz >= z0 && lz <= z1) return false
+  }
+  return true
+}
+
 export function terrainHeightAt(worldX, worldZ) {
   const lx = worldX / ISLAND_SCALE
   const lz = worldZ / ISLAND_SCALE
@@ -38,5 +47,5 @@ export function terrainHeightAt(worldX, worldZ) {
   ) {
     return AGE_MACHINES_TOP_Y
   }
-  return GROUND_Y
+  return offIsland(lx, lz) ? -Infinity : GROUND_Y
 }

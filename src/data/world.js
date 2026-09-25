@@ -4,8 +4,8 @@
 // lives in data/island.js.
 
 export const WATER_Y = 0
-export const WATER_WIDTH = 200
-export const WATER_DEPTH = 200
+export const WATER_WIDTH = 2000
+export const WATER_DEPTH = 2000
 
 export const ISLAND_HEIGHT = 1 // island top sits this far above the water
 export const ISLAND_WIDTH = 64
@@ -23,3 +23,9 @@ export const GROUND_WIDTH = ISLAND_WIDTH * ISLAND_SCALE
 export const GROUND_DEPTH = ISLAND_DEPTH * ISLAND_SCALE
 
 export const SPAWN = { x: 0, y: GROUND_Y, z: -9 * ISLAND_SCALE }
+
+// Walking off the island's grass edge means falling through open air and
+// into the water below — once the player has sunk this far under the
+// surface, playerMovement.js counts them as drowned and respawns them,
+// rather than letting them fall/swim forever.
+export const WATER_DEATH_Y = WATER_Y - 3

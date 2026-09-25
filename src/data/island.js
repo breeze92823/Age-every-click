@@ -127,6 +127,12 @@ function buildEdge() {
 }
 export const EDGE = buildEdge()
 
+// Every rect the grass top actually covers — the walkable island footprint.
+// Shared by Island.jsx (what it renders) and terrainHeight.js (what the
+// player can stand on): past this, there's no ground, only open air down to
+// the water.
+export const GRASS_RECTS = [CORE, ...EDGE.filter((c) => c.grass).map((c) => c.grass)]
+
 const DECOR_BOUNDS = Math.min(HALF_W, HALF_D) - 1.5
 const BLOCKED = [
   ...PATHS,

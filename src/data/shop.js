@@ -5,6 +5,5 @@
 // webhook neither project has, so that button stays visual-only.
 export const SHOP_ITEMS = [
   { id: 'x2_coins', name: 'x2 Coins', priceBux: 79, coinsRequired: 79000, iconUrl: '/ui/xp_cup.png', featured: true },
-  { id: 'vip_laser', name: 'VIP LASER', priceBux: 67, coinsRequired: 67000, iconUrl: null, featured: false },
-  { id: 'golden_target', name: 'GOLDEN TARGET', priceBux: 299, coinsRequired: 299000, iconUrl: null, featured: false },
+  { id: 'vip_laser', name: 'VIP AGE MACHINE', priceBux: 67, coinsRequired: 67000, iconUrl: null, featured: false },
 ]

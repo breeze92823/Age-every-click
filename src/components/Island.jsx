@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import { MeshStandardMaterial } from 'three'
 import { MATERIAL_PBR } from '../data/materials.js'
 import { GROUND_Y, ISLAND_HEIGHT, ISLAND_SCALE } from '../data/world.js'
-import { CORE, EDGE, PATHS, ENCLOSURES, ENCLOSURE_BORDER, CURB_HEIGHT, BED_DEPTH } from '../data/island.js'
+import { CORE, EDGE, PATHS, ENCLOSURES, ENCLOSURE_BORDER, CURB_HEIGHT, BED_DEPTH, GRASS_RECTS } from '../data/island.js'
 import { makeStudTexture } from '../systems/studTexture.js'
 import { makeChevronTexture } from '../systems/canvasTextures.js'
 import { flatRect, slab, directedStrip, merge } from '../systems/levelGeometry.js'
@@ -30,7 +30,7 @@ function insetRect([x0, z0, x1, z1], d) {
 }
 
 function buildIsland() {
-  const grassRects = [CORE, ...EDGE.filter((c) => c.grass).map((c) => c.grass)]
+  const grassRects = GRASS_RECTS
   const sandRects = [CORE, ...EDGE.map((c) => c.sand)]
   const strips = ENCLOSURES.flatMap((r) => curbStrips(r, ENCLOSURE_BORDER))
   const curbTop = GROUND_Y + CURB_HEIGHT
