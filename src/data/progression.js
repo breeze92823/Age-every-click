@@ -39,43 +39,37 @@ export const AGE_MAX = 40_000_000_000
 const AGE_SEED_MILESTONES = [0, 5, 18, 30, 45, 100]
 const AGE_SEED_LEVEL_MAX = AGE_SEED_MILESTONES.length - 1
 
-// A pure `round(100 * ratio^n)` curve grows so slowly right after level 5
-// that dozens of consecutive levels round to the exact same Age (100) before
-// the exponential catches up — those levels would all be crossed in one
-// jump instead of feeling like a continuation of the hand-picked pattern.
-// Solving for the smallest ratio whose *floor-clamped* growth (never less
-// than +1 Age per level) still reaches AGE_MAX by LEVEL_MAX keeps every
-// level's milestone strictly greater than the last.
-function solveAgeGrowthRatio() {
-  const finalMilestone = (ratio) => {
-    let v = AGE_SEED_MILESTONES[AGE_SEED_LEVEL_MAX]
-    for (let n = AGE_SEED_LEVEL_MAX + 1; n <= LEVEL_MAX; n++) {
-      v = Math.max(Math.round(v * ratio), v + 1)
-    }
-    return v
-  }
-  let lo = 1
-  let hi = 2
-  for (let i = 0; i < 60; i++) {
-    const mid = (lo + hi) / 2
-    if (finalMilestone(mid) >= AGE_MAX) hi = mid
-    else lo = mid
-  }
-  return hi
-}
-
-const AGE_GROWTH_RATIO = solveAgeGrowthRatio()
+// A constant-ratio (`round(100 * ratio^n)`) curve grows so slowly right
+// after level 5 that dozens of consecutive levels round to the exact same
+// Age (100) before the exponential catches up — bad two ways: (a) those
+// levels get crossed in one silent jump instead of feeling like a
+// continuation of the hand-picked pattern, and (b) forcing a minimum +1-Age
+// step to fix that starves the *next* several thousand levels of any real
+// growth instead (the whole budget from 100 to AGE_MAX is only ~4·10^8x
+// spread over ~50,000 levels — a constant ratio has no room to start big).
+//
+// A power-law curve (`100 * x^p`) has no such flat spot: its *relative*
+// growth per level tapers smoothly and continuously from big early jumps
+// (level 6 lands a few hundred past 100, echoing the seed's own 45→100
+// jump) down toward tiny long-tail steps, while its *absolute* step size
+// keeps rising (p > 1 makes it convex) — so no level ever needs a floor
+// clamp, and there's no seam where the pace visibly changes gears.
+const AGE_POWER = Math.log(AGE_MAX / AGE_SEED_MILESTONES[AGE_SEED_LEVEL_MAX]) / Math.log(LEVEL_MAX - AGE_SEED_LEVEL_MAX + 1)
 
 // Precomputed whole-Age threshold for every level 0..LEVEL_MAX: the seed
-// curve up to level 5 (age 100), then the strictly-increasing growth above,
-// clamped to land exactly on AGE_MAX at LEVEL_MAX. Built once at module
-// load so ageMilestone/levelForAge are cheap O(1)/O(log n) lookups instead
-// of replaying the growth from level 5 on every call.
+// curve up to level 5 (age 100), then the power-law growth above, capped to
+// land exactly on AGE_MAX at LEVEL_MAX. Built once at module load so
+// ageMilestone/levelForAge are cheap O(1)/O(log n) lookups instead of
+// recomputing the curve on every call. `Math.max(v, prev + 1)` is a
+// defensive backstop only — the power law is monotonic by construction and
+// never needs it — kept in case AGE_POWER is ever tuned close to 1.
 const AGE_MILESTONES = (() => {
   const arr = new Array(LEVEL_MAX + 1)
   for (let n = 0; n <= AGE_SEED_LEVEL_MAX; n++) arr[n] = AGE_SEED_MILESTONES[n]
   for (let n = AGE_SEED_LEVEL_MAX + 1; n < LEVEL_MAX; n++) {
-    arr[n] = Math.max(Math.round(arr[n - 1] * AGE_GROWTH_RATIO), arr[n - 1] + 1)
+    const x = n - AGE_SEED_LEVEL_MAX + 1
+    const v = Math.round(AGE_SEED_MILESTONES[AGE_SEED_LEVEL_MAX] * Math.pow(x, AGE_POWER))
+    arr[n] = Math.max(v, arr[n - 1] + 1)
   }
   arr[LEVEL_MAX] = AGE_MAX
   return arr
