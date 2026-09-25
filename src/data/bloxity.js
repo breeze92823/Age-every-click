@@ -5,6 +5,14 @@
 // Slug this game is registered under on bloxity.io (https://bloxity.io/g/test-game).
 export const GAME_SLUG = 'age-every-click'
 
+// Explicit dev-mode escape hatch (set via .env / .env.local, see
+// .env.example) — forces the Bloxity SDK (sdk.bloxity.io) and avatar CDN
+// (static.bloxity.io) to be treated as unavailable no matter what actually
+// loads, so local dev never depends on those hosts being reachable. Off by
+// default: a plain `npm run dev` still tries the real SDK/CDN, same as
+// production, and only falls back on an actual failure.
+export const DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true'
+
 // Profile picture shown for a guest (not signed in) or when a signed-in user
 // has no `pfp`. components/hud/IdentityChip.jsx's <img> onError falls back
 // to an inline silhouette so a blocked CDN never leaves an empty slot.

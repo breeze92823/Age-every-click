@@ -23,6 +23,7 @@ import {
 } from '../systems/canvasTextures.js'
 import { formatCompact } from '../systems/format.js'
 import { useGameStore } from '../store/useGameStore.js'
+import { playButtonClick, playActionFail } from '../systems/sfx.js'
 
 // The hub's set pieces, laid out per data/island.js. Visual only for now —
 // nothing here is interactive or collidable yet. Everything faces +Z, toward
@@ -89,7 +90,14 @@ function PriceTag({ price, position }) {
 // billboard like the other labels) so it doesn't turn toward whichever side
 // the player is viewing from. A plane's default normal already points +Z,
 // so no rotation is needed. Meshes raycast like sprites do, so this still
-// takes r3f's onClick directly — buyAgeMachine re-checks affordability itself.
+// takes r3f's onClick directly.
+//
+// There's no earn loop yet (see useGameStore's buyAgeMachine comment), so
+// wins sits at 0 and every click currently fails the affordability check —
+// with nothing else wired up that read as the button not being clickable at
+// all. A click now always plays a sound (success click or fail buzz) so it's
+// never silent, and the cursor turns to a pointer on hover to signal it's
+// interactive in the first place.
 function BuyButton({ index, position }) {
   const buyAgeMachine = useGameStore((s) => s.buyAgeMachine)
   const { texture, aspect } = useMemo(() => makeBuyButtonTexture(), [])
@@ -100,7 +108,16 @@ function BuyButton({ index, position }) {
       position={position}
       onClick={(e) => {
         e.stopPropagation()
-        buyAgeMachine(index)
+        if (buyAgeMachine(index)) playButtonClick()
+        else playActionFail()
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation()
+        document.body.style.cursor = 'pointer'
+      }}
+      onPointerOut={(e) => {
+        e.stopPropagation()
+        document.body.style.cursor = 'auto'
       }}
     >
       <planeGeometry args={[height * aspect, height]} />

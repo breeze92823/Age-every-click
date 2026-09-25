@@ -4,6 +4,7 @@ import { Quaternion, Vector3 } from 'three'
 import { player } from '../systems/playerState.js'
 import { MATERIAL_PBR } from '../data/materials.js'
 import { authState, getEquippedAvatar, getProportions, onAvatarChanged, onProportionsChanged } from '../systems/bloxity.js'
+import { DEV_MODE } from '../data/bloxity.js'
 import { applyProportions, assembleAvatar } from '../systems/avatarLoader.js'
 import { makeGait, updateGait, disposeGait } from '../systems/avatarAnim.js'
 import { useAuth } from './hud/hooks.js'
@@ -66,6 +67,9 @@ function useBloxityAvatar() {
     let current = null
 
     async function load() {
+      // DEV_MODE skips static.bloxity.io entirely (a separate host from the
+      // SDK script) so local dev never waits on it — capsule stays shown.
+      if (DEV_MODE) return
       const equipped = (signedIn && getEquippedAvatar()) || DEFAULT_EQUIPPED
       const group = await assembleAvatar(equipped, { signal: controller.signal })
       if (cancelled || !group) return

@@ -7,7 +7,7 @@
 // Ported from Ice-Skate's systems/bloxity.js, trimmed of avatar-CDN rig
 // loading (this template's Player.jsx is a plain capsule, not driven by a
 // loaded avatar) and Bux balance display specifics that don't matter here.
-import { GAME_SLUG, SETTINGS } from '../data/bloxity.js'
+import { GAME_SLUG, SETTINGS, DEV_MODE } from '../data/bloxity.js'
 import { setSensitivity } from './cameraOrbit.js'
 import { settings, setSetting, subscribe as subscribeSettings } from './settingsState.js'
 import { resetPlayer } from './playerState.js'
@@ -17,6 +17,7 @@ import * as audio from './audio.js'
 import * as sfx from './sfx.js'
 
 export function sdk() {
+  if (DEV_MODE) return null
   return (typeof window !== 'undefined' && window.Legion && window.Legion.SDK) || null
 }
 
@@ -167,6 +168,7 @@ export function init() {
 
   const SDK = sdk()
   if (!SDK) {
+    if (DEV_MODE) console.info('[bloxity] VITE_DEV_MODE=true — skipping SDK/CDN, running on capsule fallback')
     authState.ready = true
     emitAuth()
     return

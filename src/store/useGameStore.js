@@ -138,14 +138,18 @@ export const useGameStore = create((set, get) => ({
     set({ equippedAura: null })
   },
 
-  // Called from IslandLandmarks.jsx's per-machine Buy sprite. Re-checks
+  // Called from IslandLandmarks.jsx's per-machine Buy button. Re-checks
   // ownership and affordability itself, same guard as buyHexPad/buyAuraTier.
+  // Returns whether the purchase went through, so the caller can give the
+  // click audible feedback either way (there's no earn loop yet, so most
+  // clicks fail affordability — this replaces silent no-ops with a sound).
   buyAgeMachine(index) {
     const state = get()
-    if (state.ownedAgeMachines.has(index)) return
+    if (state.ownedAgeMachines.has(index)) return false
     const tier = AGE_MACHINES.tiers[index]
-    if (!tier || tier.price == null || state.wins < tier.price) return
+    if (!tier || tier.price == null || state.wins < tier.price) return false
     set((s) => ({ wins: s.wins - tier.price, ownedAgeMachines: new Set(s.ownedAgeMachines).add(index) }))
+    return true
   },
 
   // Called from components/hud/Hud.jsx's ShopItemCard "Buy with Wins"

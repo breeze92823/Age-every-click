@@ -257,10 +257,50 @@ function ToolbarButton({ gradient, studOverlay, icon, label, onClick, isTouch })
   )
 }
 
-// Left-edge, vertically centred stack: wins count above, a small toolbar of
-// economy panels below (Rebirth/Shop).
-function LeftCenterControls() {
+// Right-edge, vertically centred: the wins count pill on its own.
+function RightCenterWins() {
   const wins = useGameStore((s) => s.wins)
+  const isTouch = useTouchMode()
+
+  const winsPill = (
+    <div className={`flex items-center gap-1 text-slate-100 ${isTouch ? 'px-2 py-1.5' : 'gap-2 px-3 py-2'}`}>
+      <span aria-hidden="true" className={isTouch ? 'text-xl leading-none' : 'text-3xl leading-none'}>
+        🪙
+      </span>
+      <span
+        className="font-bold tabular-nums"
+        style={{
+          fontSize: isTouch ? '0.85rem' : '1.125rem',
+          lineHeight: 1,
+          color: '#ffd21e',
+          letterSpacing: '-0.02em',
+          WebkitTextStroke: isTouch ? '1.5px #000000' : '2px #000000',
+          paintOrder: 'stroke fill',
+        }}
+      >
+        {formatCompact(wins)}
+      </span>
+    </div>
+  )
+
+  if (isTouch) {
+    return (
+      <div data-hud="right-center" className="pointer-events-none absolute right-4 top-24 flex flex-col items-end gap-2">
+        {winsPill}
+      </div>
+    )
+  }
+
+  return (
+    <div data-hud="right-center" className="pointer-events-none absolute right-4 top-1/2 flex -translate-y-1/2 flex-col items-center gap-3">
+      {winsPill}
+    </div>
+  )
+}
+
+// Left-edge, vertically centred stack: a small toolbar of economy panels
+// (Rebirth/Shop).
+function LeftCenterControls() {
   const level = useGameStore((s) => s.level)
   const rebirth = useGameStore((s) => s.rebirth)
   const canRebirth = useGameStore((s) => canAcceptRebirth(s.level, s.rebirth))
@@ -287,25 +327,6 @@ function LeftCenterControls() {
 
   const portal = modal && createPortal(modal, document.body)
 
-  const winsPill = (
-    <div className={`flex items-center gap-1 text-slate-100 ${isTouch ? 'px-2 py-1.5' : 'gap-2 px-3 py-2'}`}>
-      <img src="/ui/xp_cup.png" alt="" className={isTouch ? 'h-5 w-5' : 'h-8 w-8'} draggable={false} />
-      <span
-        className="font-bold tabular-nums"
-        style={{
-          fontSize: isTouch ? '0.85rem' : '1.125rem',
-          lineHeight: 1,
-          color: '#ffd21e',
-          letterSpacing: '-0.02em',
-          WebkitTextStroke: isTouch ? '1.5px #000000' : '2px #000000',
-          paintOrder: 'stroke fill',
-        }}
-      >
-        {formatCompact(wins)}
-      </span>
-    </div>
-  )
-
   const buttons = (
     <div className={`flex items-center ${isTouch ? 'gap-1.5' : 'flex-wrap justify-center gap-2'}`}>
       <ToolbarButton
@@ -330,7 +351,6 @@ function LeftCenterControls() {
   if (isTouch) {
     return (
       <div data-hud="left-center" className="pointer-events-none absolute left-4 top-24 flex flex-col items-start gap-2">
-        {winsPill}
         {buttons}
         {portal}
       </div>
@@ -339,7 +359,6 @@ function LeftCenterControls() {
 
   return (
     <div data-hud="left-center" className="pointer-events-none absolute left-4 top-1/2 flex -translate-y-1/2 flex-col items-center gap-3">
-      {winsPill}
       {buttons}
       {portal}
     </div>
@@ -367,6 +386,8 @@ export default function Hud() {
       <TouchControls />
 
       <LeftCenterControls />
+
+      <RightCenterWins />
 
       {/* Top-left identity chip: dev-only diagnostic — renders null
          otherwise. Event-driven, never per frame. */}
