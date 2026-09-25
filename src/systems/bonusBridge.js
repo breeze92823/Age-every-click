@@ -4,7 +4,7 @@ import {
   START_RECT,
   END_RECT,
   SPAWN_RECT,
-  FINISH_PAD,
+  EXIT_PAD,
   TILE_SIZE,
   LANE_X,
   COLUMN_PITCH,
@@ -84,9 +84,11 @@ function supports(t, x, z) {
   return !t.broken && Math.abs(x - t.x) <= half && Math.abs(z - t.z) <= half
 }
 
+// The yellow pad (EXIT_PAD) is the real finish trigger: it pays out and
+// returns to island in one step, rather than just returning with no reward.
 function onFinishPad(x, z) {
-  const half = FINISH_PAD.size / 2
-  return Math.abs(x - FINISH_PAD.x) <= half && Math.abs(z - FINISH_PAD.z) <= half
+  const half = EXIT_PAD.size / 2
+  return Math.abs(x - EXIT_PAD.x) <= half && Math.abs(z - EXIT_PAD.z) <= half
 }
 
 // Top surface height under (x, z), or -Infinity over the void.

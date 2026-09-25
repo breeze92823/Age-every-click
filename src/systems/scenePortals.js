@@ -1,13 +1,16 @@
 import { OBBY } from '../data/island.js'
 import { ISLAND_SCALE, SPAWN } from '../data/world.js'
-import { EXIT_PAD, SPAWN as BONUS_SPAWN } from '../data/bonusBridge.js'
+import { SPAWN as BONUS_SPAWN } from '../data/bonusBridge.js'
 import { EXIT_PAD as STUD_JUMPS_EXIT_PAD, SPAWN as STUD_JUMPS_SPAWN } from '../data/studJumpsScene.js'
 import { EXIT_PAD as TSUNAMI_EXIT_PAD, SPAWN as TSUNAMI_SPAWN } from '../data/tsunamiScene.js'
 
 // One-way triggers, checked each frame in playerMovement.js: the Impossible
 // Bridge, Stud Jumps and Tsunami Escape obby pads each send the player into
-// their own scene, and the yellow exit pad on that scene's start platform
-// sends them back to the island's SPAWN.
+// their own scene, and the exit pad on that scene's start platform sends
+// them back to the island's SPAWN. The Bonus Scene has no branch here for
+// its own exit pad — systems/bonusBridge.js's stepBonusBridge runs first
+// each frame and already returns to island (with a payout) when the player
+// reaches it, so this never gets a chance to fire for that pad.
 
 const IMPOSSIBLE_BRIDGE = OBBY.pads.find((p) => p.name === 'Impossible Bridge')
 const STUD_JUMPS = OBBY.pads.find((p) => p.name === 'Stud Jumps')
@@ -40,11 +43,6 @@ export function checkScenePortal(worldX, worldZ, currentScene) {
     const dzTsunami = lz - TO_TSUNAMI.z
     if (dxTsunami * dxTsunami + dzTsunami * dzTsunami <= TO_TSUNAMI.radius * TO_TSUNAMI.radius) {
       return { scene: 'tsunami', spawn: TSUNAMI_SPAWN }
-    }
-  } else if (currentScene === 'bonus') {
-    const half = EXIT_PAD.size / 2
-    if (Math.abs(worldX - EXIT_PAD.x) <= half && Math.abs(worldZ - EXIT_PAD.z) <= half) {
-      return { scene: 'island', spawn: SPAWN }
     }
   } else if (currentScene === 'studJumps') {
     const half = STUD_JUMPS_EXIT_PAD.size / 2
