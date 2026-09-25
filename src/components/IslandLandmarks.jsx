@@ -371,10 +371,11 @@ function Obby() {
   return (
     <group position={[OBBY.x, GROUND_Y, 0]}>
       <Label text="OBBY" color="#ffd23d" position={[0, 4.4, OBBY.signZ]} height={1.6} />
-      {OBBY.pads.map(({ z, name, color }) => (
+      {OBBY.pads.map(({ z, name, color, minCoins }) => (
         <group key={name} position-z={z}>
           <Box size={[2.4, 0.5, 2.4]} position={[0, 0.25, 0]} color="#d8dbe1" />
           <Box size={[2, 0.08, 2]} position={[0, 0.54, 0]} color={color} cast={false} />
+          <Label text={`+🪙${minCoins} min`} color="#ffd23d" position={[0, 2.15, 0]} height={0.4} />
           <Label text={name} color={color} position={[0, 1.7, 0]} height={0.55} />
           <mesh position={[-3.8, 0.035, 0]} rotation-x={-Math.PI / 2}>
             <planeGeometry args={[3.6, 1.2]} />

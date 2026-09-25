@@ -1,4 +1,7 @@
 import { ISLAND_WIDTH, ISLAND_DEPTH, ISLAND_SCALE, SPAWN } from './world.js'
+import { REWARD_COINS as BRIDGE_REWARD_COINS } from './bonusBridge.js'
+import { MIN_REWARD as STUD_JUMPS_MIN_REWARD } from './studJumpsScene.js'
+import { REWARD_COINS as TSUNAMI_REWARD_COINS } from './tsunamiScene.js'
 
 // Hub layout for the island, as data. Rects are [x0, z0, x1, z1] in world
 // metres; -Z is "north", the way the camera faces from the spawn. Scale
@@ -74,9 +77,9 @@ export const OBBY = {
   x: 23,
   signZ: -4.2,
   pads: [
-    { z: -1, name: 'Impossible Bridge', color: '#e04cf0' },
-    { z: 3, name: 'Stud Jumps', color: '#ffae2b' },
-    { z: 7, name: 'Tsunami Escape', color: '#35d0ff' },
+    { z: -1, name: 'Impossible Bridge', color: '#e04cf0', minCoins: BRIDGE_REWARD_COINS },
+    { z: 3, name: 'Stud Jumps', color: '#ffae2b', minCoins: STUD_JUMPS_MIN_REWARD },
+    { z: 7, name: 'Tsunami Escape', color: '#35d0ff', minCoins: TSUNAMI_REWARD_COINS },
   ],
 }
 

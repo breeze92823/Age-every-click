@@ -19,6 +19,8 @@ const LAST_STUDS = 14
 // island. Positioned near each rewarded step's outer corner — see
 // components/StudJumpsScene.jsx's CheckpointFlag for the matching visual.
 const REWARDS = { 11: 100, 12: 110, 13: 125, 14: 150 }
+// Lowest non-zero payout — what OBBY's pad label advertises as "min" coins.
+export const MIN_REWARD = Math.min(...Object.values(REWARDS).filter((r) => r > 0))
 const FLAG_OFFSET_X = 0.7
 export const FLAG_RADIUS = 0.6
 
