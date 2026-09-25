@@ -34,9 +34,9 @@ export const REBIRTH_MIN = 0
 export const REBIRTH_MAX = 5000
 export const REBIRTH_LEVEL_STEP = 10 // requirement(rebirth) = (rebirth + 1) * REBIRTH_LEVEL_STEP
 
-export const WINS_INITIAL = envInt('VITE_WINS_INITIAL', 0)
-export const WINS_MIN = 0
-export const WINS_MAX = 1_000_000_000_000
+export const COINS_INITIAL = envInt('VITE_COINS_INITIAL', 0)
+export const COINS_MIN = 0
+export const COINS_MAX = 1_000_000_000_000
 
 export const SPEED_PER_GAIN_INITIAL = 1
 export const SPEED_PER_GAIN_MIN = 1

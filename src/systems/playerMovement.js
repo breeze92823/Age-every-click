@@ -1,10 +1,17 @@
 import { inputState } from './input.js'
-import { player } from './playerState.js'
+import { player, resetPlayer } from './playerState.js'
 import { getYaw } from './cameraOrbit.js'
 import { PLAYER_MOVE_SPEED } from '../data/progression.js'
 import { terrainHeightAt } from './terrainHeight.js'
 import { conveyorPushAt } from './conveyor.js'
 import { resolveAgeMachineCollision } from './ageMachineCollision.js'
+import { resolveLandmarkCollision } from './landmarkCollision.js'
+import { checkScenePortal } from './scenePortals.js'
+import { bonusGroundAt, stepBonusBridge, resetBonusBridge } from './bonusBridge.js'
+import { studJumpsGroundAt, resolveStudJumpsWalls, stepStudJumps } from './studJumps.js'
+import { tsunamiGroundAt, resolveTsunamiWalls, stepTsunami, resetTsunami } from './tsunamiScene.js'
+import { syncYawToPlayer } from './cameraOrbit.js'
+import { useGameStore } from '../store/useGameStore.js'
 
 // Kinematic capsule, stepped once per frame: apply input -> gravity ->
 // integrate -> clamp to the ground height under the player's feet. Ground
@@ -14,6 +21,10 @@ import { resolveAgeMachineCollision } from './ageMachineCollision.js'
 const ACCEL = 45 // m/s^2 approach toward target velocity
 const GRAVITY = -22 // m/s^2
 const JUMP_SPEED = 7.5 // m/s
+// Tsunami Escape's safe slabs are 1.5 m tall, above the normal ~1.28 m apex
+// (JUMP_SPEED^2 / -2*GRAVITY), so that scene alone gets a taller jump.
+const TSUNAMI_JUMP_SPEED = 8.4 // m/s, ~1.6 m apex
+const STEP_TOLERANCE = 0.6 // m below a surface's top that still lands on it
 
 // Clamps the (dx, dz) delta as one 2D vector rather than clamping each axis
 // independently — an axis-by-axis clamp doesn't produce a delta that points
@@ -36,6 +47,15 @@ function approach2D(v, targetX, targetZ, maxDelta) {
 
 export function step(dt) {
   if (dt <= 0) return
+
+  // Which environment is mounted right now — the island's obstacles/terrain
+  // steps only apply while standing in it; the Bonus Scene's glass bridge
+  // has its own ground lookup in bonusBridge.js.
+  const currentScene = useGameStore.getState().currentScene
+  const onIsland = currentScene === 'island'
+  const onBonus = currentScene === 'bonus'
+  const onStudJumps = currentScene === 'studJumps'
+  const onTsunami = currentScene === 'tsunami'
 
   // Camera-relative ground basis.
   const yaw = getYaw()
@@ -61,22 +81,41 @@ export function step(dt) {
 
   // Jump reads last frame's grounded flag, then we clear it for this frame.
   if (inputState.jump) {
-    if (player.grounded) player.velocity.y = JUMP_SPEED
+    if (player.grounded) player.velocity.y = onTsunami ? TSUNAMI_JUMP_SPEED : JUMP_SPEED
     inputState.jump = false
   }
   player.grounded = false
 
+  const prevX = p.x
+  const prevZ = p.z
   player.velocity.y += GRAVITY * dt
   p.x += player.velocity.x * dt
   p.y += player.velocity.y * dt
   p.z += player.velocity.z * dt
 
-  const blocked = resolveAgeMachineCollision(p.x, p.z, player.dims.radius)
-  p.x = blocked.x
-  p.z = blocked.z
+  if (onIsland) {
+    const blocked = resolveAgeMachineCollision(p.x, p.z, player.dims.radius)
+    const blocked2 = resolveLandmarkCollision(blocked.x, blocked.z, player.dims.radius)
+    p.x = blocked2.x
+    p.z = blocked2.z
+  } else if (onStudJumps) {
+    resolveStudJumpsWalls(prevX, prevZ, p, player.dims.radius)
+  } else if (onTsunami) {
+    resolveTsunamiWalls(prevX, prevZ, p, player.dims.radius)
+  }
 
-  const groundY = terrainHeightAt(p.x, p.z)
-  if (p.y <= groundY) {
+  // The Bonus and Stud Jumps scenes have real gaps: their ground is
+  // -Infinity over the void, and a player already falling past a surface's
+  // top can't snap back up onto it from below.
+  const groundY = onIsland
+    ? terrainHeightAt(p.x, p.z)
+    : onBonus
+      ? bonusGroundAt(p.x, p.z)
+      : onStudJumps
+        ? studJumpsGroundAt(p.x, p.z, player.dims.radius)
+        : tsunamiGroundAt(p.x, p.z, player.dims.radius)
+  const canLand = onIsland || p.y >= groundY - STEP_TOLERANCE
+  if (p.y <= groundY && canLand) {
     p.y = groundY
     if (player.velocity.y < 0) player.velocity.y = 0
     player.grounded = true
@@ -84,7 +123,7 @@ export function step(dt) {
 
   // Standing on a curb ring carries the player along with its chevrons,
   // on top of whatever input velocity already moved them this frame.
-  if (player.grounded) {
+  if (player.grounded && onIsland) {
     const push = conveyorPushAt(p.x, p.z)
     if (push) {
       p.x += push.x * dt
@@ -95,5 +134,21 @@ export function step(dt) {
   // Face the direction of travel.
   if (Math.hypot(wishX, wishZ) > 0.01) {
     player.facing = Math.atan2(wishX, wishZ)
+  }
+
+  if (onBonus && stepBonusBridge(dt)) return
+  if (onStudJumps && stepStudJumps()) return
+  if (onTsunami && stepTsunami(dt)) return
+
+  // Stepping onto the Impossible Bridge, Stud Jumps or Tsunami Escape pad
+  // (or the exit pad in whichever scene that led to) swaps which environment
+  // is mounted and re-spawns the player there — see scenePortals.js.
+  const portal = checkScenePortal(p.x, p.z, currentScene)
+  if (portal) {
+    if (portal.scene === 'bonus') resetBonusBridge()
+    if (portal.scene === 'tsunami') resetTsunami()
+    useGameStore.getState().setScene(portal.scene)
+    resetPlayer(portal.spawn)
+    syncYawToPlayer()
   }
 }

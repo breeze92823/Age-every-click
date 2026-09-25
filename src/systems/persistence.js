@@ -10,7 +10,7 @@ function snapshot(state) {
   return {
     speed: state.speed,
     rebirth: state.rebirth,
-    wins: state.wins,
+    coins: state.coins,
     ownedHexPads: Array.from(state.ownedHexPads),
     equippedHexPad: state.equippedHexPad,
     ownedAuras: Array.from(state.ownedAuras),

@@ -16,7 +16,7 @@ installInput()
 // Installs audio + preloads sfx as part of its own init, then wires the SDK
 // if sdk.bloxity.io loaded — no-ops safely if it didn't.
 initBloxity()
-// Loads any saved Speed/Wins/Rebirth/Aura/Skates progress from localStorage
+// Loads any saved Speed/Coins/Rebirth/Aura/Skates progress from localStorage
 // and re-saves on every change — this template's stand-in for Ice-Skate's
 // server-backed save.
 installPersistence()

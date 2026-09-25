@@ -20,14 +20,17 @@ import {
   makeChevronTexture,
   makePriceTagTexture,
   makeBuyButtonTexture,
+  makeStatusTagTexture,
 } from '../systems/canvasTextures.js'
 import { formatCompact } from '../systems/format.js'
 import { useGameStore } from '../store/useGameStore.js'
 import { playButtonClick, playActionFail } from '../systems/sfx.js'
 
-// The hub's set pieces, laid out per data/island.js. Visual only for now —
-// nothing here is interactive or collidable yet. Everything faces +Z, toward
-// the spawn camera. Heights are in metres against the 1.8 m player.
+// The hub's set pieces, laid out per data/island.js. Everything faces +Z,
+// toward the spawn camera. Heights are in metres against the 1.8 m player.
+// Most of these are static obstacles the player collides with — see
+// landmarkCollision.js for the blocking radii and what's deliberately left
+// walkable (SpawnPad, the Obby pads, the Trampoline).
 
 const WOOD = '#9c6232'
 const WOOD_DARK = '#6e4221'
@@ -74,9 +77,11 @@ function TierLabel({ name, rate, color, position }) {
 }
 
 // Coin + price capsule, stacked above BuyButton — the top half of the buy
-// banner. Disappears once the machine is owned (AgeMachines below).
-function PriceTag({ price, position }) {
-  const { texture, aspect } = useMemo(() => makePriceTagTexture(formatCompact(price)), [price])
+// banner. Disappears once the machine is owned (AgeMachines below). `text`
+// is either a formatted coin amount or a tier's priceLabel override (e.g.
+// VIP's "Cannot buy with coin").
+function PriceTag({ text, position }) {
+  const { texture, aspect } = useMemo(() => makePriceTagTexture(text), [text])
   useEffect(() => () => texture.dispose(), [texture])
   const height = 0.4
   return (
@@ -86,21 +91,32 @@ function PriceTag({ price, position }) {
   )
 }
 
-// Clickable "Buy" pill under the price tag. Fixed to face +Z (not a
-// billboard like the other labels) so it doesn't turn toward whichever side
-// the player is viewing from. A plane's default normal already points +Z,
-// so no rotation is needed. Meshes raycast like sprites do, so this still
-// takes r3f's onClick directly.
+// Plain black pill that replaces PriceTag once a machine is owned.
+function OwnedTag({ position }) {
+  const { texture, aspect } = useMemo(() => makeStatusTagTexture('Owned'), [])
+  useEffect(() => () => texture.dispose(), [texture])
+  const height = 0.4
+  return (
+    <sprite position={position} scale={[height * aspect, height, 1]}>
+      <spriteMaterial map={texture} transparent depthWrite={false} />
+    </sprite>
+  )
+}
+
+// Clickable pill under the price/owned tag — reads "Buy" before purchase and
+// "Use" after. Fixed to face +Z (not a billboard like the other labels) so
+// it doesn't turn toward whichever side the player is viewing from. A
+// plane's default normal already points +Z, so no rotation is needed.
+// Meshes raycast like sprites do, so this still takes r3f's onClick directly.
 //
-// There's no earn loop yet (see useGameStore's buyAgeMachine comment), so
-// wins sits at 0 and every click currently fails the affordability check —
-// with nothing else wired up that read as the button not being clickable at
-// all. A click now always plays a sound (success click or fail buzz) so it's
-// never silent, and the cursor turns to a pointer on hover to signal it's
-// interactive in the first place.
-function BuyButton({ index, position }) {
+// Once owned, a click just plays the confirmation sound — there's no
+// equip/production effect yet (see useGameStore's buyAgeMachine comment), so
+// "Use" mirrors "Buy"'s pre-earn-loop pattern of always giving audible
+// feedback rather than being a silent no-op.
+function BuyButton({ index, owned, position }) {
   const buyAgeMachine = useGameStore((s) => s.buyAgeMachine)
-  const { texture, aspect } = useMemo(() => makeBuyButtonTexture(), [])
+  const label = owned ? 'Use' : 'Buy'
+  const { texture, aspect } = useMemo(() => makeBuyButtonTexture({ label }), [label])
   useEffect(() => () => texture.dispose(), [texture])
   const height = 0.34
   return (
@@ -108,8 +124,13 @@ function BuyButton({ index, position }) {
       position={position}
       onClick={(e) => {
         e.stopPropagation()
-        if (buyAgeMachine(index)) playButtonClick()
-        else playActionFail()
+        if (owned) {
+          playButtonClick()
+        } else if (buyAgeMachine(index)) {
+          playButtonClick()
+        } else {
+          playActionFail()
+        }
       }}
       onPointerOver={(e) => {
         e.stopPropagation()
@@ -178,15 +199,20 @@ function AgeMachines() {
       />
       {tiers.map((t, i) => {
         const x = (i - mid) * spacing
-        const forSale = t.price != null && !ownedAgeMachines.has(i)
+        const owned = ownedAgeMachines.has(i)
+        const purchasable = t.price != null || t.priceLabel != null
         return (
           <group key={t.name}>
             <AgeMachine x={x} color={t.color} emissive={t.emissive} emissiveIntensity={t.emissiveIntensity} />
             <TierLabel name={t.name} rate={t.rate} color={t.emissive ?? t.color} position={[x, 3.7, 0]} />
-            {forSale && (
+            {(purchasable || owned) && (
               <>
-                <PriceTag price={t.price} position={[x, 1.95, GLASS_RADIUS + 0.4]} />
-                <BuyButton index={i} position={[x, 1.55, GLASS_RADIUS + 0.1]} />
+                {owned ? (
+                  <OwnedTag position={[x, 1.95, GLASS_RADIUS + 0.4]} />
+                ) : (
+                  <PriceTag text={t.priceLabel ?? formatCompact(t.price)} position={[x, 1.95, GLASS_RADIUS + 0.4]} />
+                )}
+                <BuyButton index={i} owned={owned} position={[x, 1.55, GLASS_RADIUS + 0.1]} />
               </>
             )}
           </group>

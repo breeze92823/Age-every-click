@@ -7,9 +7,9 @@ import {
   REBIRTH_INITIAL,
   REBIRTH_MIN,
   REBIRTH_MAX,
-  WINS_INITIAL,
-  WINS_MIN,
-  WINS_MAX,
+  COINS_INITIAL,
+  COINS_MIN,
+  COINS_MAX,
   SPEED_PER_GAIN_INITIAL,
   levelForSpeed,
   canAcceptRebirth,
@@ -35,12 +35,19 @@ function derive(state) {
 }
 
 export const useGameStore = create((set, get) => ({
+  // Which environment is currently mounted in App.jsx — 'island' (the hub),
+  // 'bonus' (through the Impossible Bridge obby pad), 'studJumps' (through
+  // the Stud Jumps obby pad), or 'tsunami' (through the Tsunami Escape obby
+  // pad). Transient UI state, not durable progress, so persistence.js's
+  // snapshot() never includes it and a reload always comes back on the
+  // island.
+  currentScene: 'island',
   speed: SPEED_INITIAL,
   level: LEVEL_INITIAL,
   rebirth: REBIRTH_INITIAL,
-  wins: WINS_INITIAL,
+  coins: COINS_INITIAL,
   speedPerGain: SPEED_PER_GAIN_INITIAL,
-  // Tier 0 has winsRequired: 0 and speedPerGain 1 — the free starter tier,
+  // Tier 0 has coinsRequired: 0 and speedPerGain 1 — the free starter tier,
   // owned and equipped from the start.
   ownedHexPads: new Set([0]),
   equippedHexPad: 0,
@@ -48,9 +55,14 @@ export const useGameStore = create((set, get) => ({
   equippedAura: null,
   // Indices into data/island.js's AGE_MACHINES.tiers that the player has
   // bought. Buying an Age Machine has no other effect yet (see
-  // components/hud/Hud.jsx's note that wins/speed have no earn action in
+  // components/hud/Hud.jsx's note that coins/speed have no earn action in
   // this template) — this is ownership only, not a production tick.
   ownedAgeMachines: new Set(),
+
+  // Called from scenePortals.js's per-frame trigger check.
+  setScene(scene) {
+    set({ currentScene: scene })
+  },
 
   // One click's worth of Speed. `multiplier` defaults to 1 (kept for parity
   // with Ice-Skate's walking-tick call site, which passed a treadmill's x2/x3
@@ -84,20 +96,20 @@ export const useGameStore = create((set, get) => ({
     )
   },
 
-  awardWins(amount) {
+  awardCoins(amount) {
     if (!(amount > 0)) return
-    set((s) => ({ wins: clamp(s.wins + amount, WINS_MIN, WINS_MAX) }))
+    set((s) => ({ coins: clamp(s.coins + amount, COINS_MIN, COINS_MAX) }))
   },
 
   // Re-checks ownership and affordability itself so a duplicate/stale caller
-  // (or a wins value that has since dropped) can never double-charge,
-  // double-apply, or drive wins negative.
+  // (or a coins value that has since dropped) can never double-charge,
+  // double-apply, or drive coins negative.
   buyHexPad(index) {
     const state = get()
     if (state.ownedHexPads.has(index)) return
     const tier = HEX_SPEED_PAD_TIERS[index]
-    if (!tier || state.wins < tier.winsRequired) return
-    set((s) => ({ wins: s.wins - tier.winsRequired, ownedHexPads: new Set(s.ownedHexPads).add(index) }))
+    if (!tier || state.coins < tier.coinsRequired) return
+    set((s) => ({ coins: s.coins - tier.coinsRequired, ownedHexPads: new Set(s.ownedHexPads).add(index) }))
   },
 
   equipHexPad(index) {
@@ -111,15 +123,15 @@ export const useGameStore = create((set, get) => ({
     }))
   },
 
-  // Called from components/hud/Hud.jsx's AuraEntry wins button. Buying
+  // Called from components/hud/Hud.jsx's AuraEntry coins button. Buying
   // doesn't equip it — the tier just becomes available to equip via
   // equipAuraTier below.
   buyAuraTier(index) {
     const state = get()
     if (state.ownedAuras.has(index)) return
     const tier = AURA_TIERS[index]
-    if (!tier || state.wins < tier.winsRequired) return
-    set((s) => ({ wins: s.wins - tier.winsRequired, ownedAuras: new Set(s.ownedAuras).add(index) }))
+    if (!tier || state.coins < tier.coinsRequired) return
+    set((s) => ({ coins: s.coins - tier.coinsRequired, ownedAuras: new Set(s.ownedAuras).add(index) }))
   },
 
   // Only one aura can be equipped at a time — setting equippedAura to a new
@@ -147,18 +159,18 @@ export const useGameStore = create((set, get) => ({
     const state = get()
     if (state.ownedAgeMachines.has(index)) return false
     const tier = AGE_MACHINES.tiers[index]
-    if (!tier || tier.price == null || state.wins < tier.price) return false
-    set((s) => ({ wins: s.wins - tier.price, ownedAgeMachines: new Set(s.ownedAgeMachines).add(index) }))
+    if (!tier || tier.price == null || state.coins < tier.price) return false
+    set((s) => ({ coins: s.coins - tier.price, ownedAgeMachines: new Set(s.ownedAgeMachines).add(index) }))
     return true
   },
 
-  // Called from components/hud/Hud.jsx's ShopItemCard "Buy with Wins"
-  // button — the wins-priced alternative to the SKU's (unwired) Bux price.
-  buyShopItemWithWins(id) {
+  // Called from components/hud/Hud.jsx's ShopItemCard "Buy with Coins"
+  // button — the coins-priced alternative to the SKU's (unwired) Bux price.
+  buyShopItemWithCoins(id) {
     const state = get()
     const item = SHOP_ITEMS.find((i) => i.id === id)
-    if (!item || state.wins < item.winsRequired) return
-    set((s) => ({ wins: s.wins - item.winsRequired }))
+    if (!item || state.coins < item.coinsRequired) return
+    set((s) => ({ coins: s.coins - item.coinsRequired }))
   },
 
   // Puts every account-scoped field back to the exact defaults a brand-new
@@ -169,7 +181,7 @@ export const useGameStore = create((set, get) => ({
         ...s,
         speed: SPEED_INITIAL,
         rebirth: REBIRTH_INITIAL,
-        wins: WINS_INITIAL,
+        coins: COINS_INITIAL,
         speedPerGain: SPEED_PER_GAIN_INITIAL,
         ownedHexPads: new Set([0]),
         equippedHexPad: 0,
@@ -189,7 +201,7 @@ export const useGameStore = create((set, get) => ({
     set((s) => {
       const speed = clamp(Number(saved.speed) || 0, SPEED_MIN, SPEED_MAX)
       const rebirth = clamp(Number(saved.rebirth) || 0, REBIRTH_MIN, REBIRTH_MAX)
-      const wins = clamp(Number(saved.wins) || 0, WINS_MIN, WINS_MAX)
+      const coins = clamp(Number(saved.coins) || 0, COINS_MIN, COINS_MAX)
       const ownedHexPads = new Set(
         Array.isArray(saved.ownedHexPads) && saved.ownedHexPads.length ? saved.ownedHexPads : [0],
       )
@@ -202,7 +214,7 @@ export const useGameStore = create((set, get) => ({
         ...s,
         speed,
         rebirth,
-        wins,
+        coins,
         ownedHexPads,
         equippedHexPad,
         speedPerGain: tier ? tier.speedPerGain : s.speedPerGain,

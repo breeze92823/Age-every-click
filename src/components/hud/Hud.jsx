@@ -17,6 +17,7 @@ import AuthPanel from './AuthPanel.jsx'
 import IdentityChip from './IdentityChip.jsx'
 import ActionResult from './ActionResult.jsx'
 import ActionPopups from './ActionPopups.jsx'
+import BonusTimer from './BonusTimer.jsx'
 import { useSettings, useTouchMode } from './hooks.js'
 
 // This Hud is ported from Ice-Skate's components/hud/Hud.jsx: same LevelBar/
@@ -141,9 +142,9 @@ function BuxIcon({ className }) {
 const BUX_BUY_ENABLED = false
 
 function ShopItemCard({ item, isTouch }) {
-  const wins = useGameStore((s) => s.wins)
-  const buyShopItemWithWins = useGameStore((s) => s.buyShopItemWithWins)
-  const canAffordWins = wins >= item.winsRequired
+  const coins = useGameStore((s) => s.coins)
+  const buyShopItemWithCoins = useGameStore((s) => s.buyShopItemWithCoins)
+  const canAffordCoins = coins >= item.coinsRequired
   const textOutlineLocal = { WebkitTextStroke: isTouch ? '1px black' : '1.5px black', paintOrder: 'stroke fill' }
   return (
     <div
@@ -188,14 +189,14 @@ function ShopItemCard({ item, isTouch }) {
           type="button"
           onClick={() => {
             playButtonClick()
-            buyShopItemWithWins(item.id)
+            buyShopItemWithCoins(item.id)
           }}
-          disabled={!canAffordWins}
+          disabled={!canAffordCoins}
           className={`flex w-full items-center justify-center gap-1 rounded-lg border-2 border-black bg-gradient-to-b from-amber-300 to-amber-500 font-black text-white transition hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100 ${isTouch ? 'py-1 text-sm' : 'py-2 text-lg'}`}
           style={textOutlineLocal}
         >
-          <span>🏆</span>
-          <span>{formatCompact(item.winsRequired)}</span>
+          <span>🪙</span>
+          <span>{formatCompact(item.coinsRequired)}</span>
         </button>
       </div>
     </div>
@@ -257,20 +258,20 @@ function ToolbarButton({ gradient, studOverlay, icon, label, onClick, isTouch })
   )
 }
 
-// Right-edge, vertically centred: the wins count pill on its own.
-function RightCenterWins() {
-  const wins = useGameStore((s) => s.wins)
+// Right-edge, vertically centred: the coins count pill on its own.
+function RightCenterCoins() {
+  const coins = useGameStore((s) => s.coins)
   const isTouch = useTouchMode()
 
-  const winsPill = (
+  const coinsPill = (
     <div className={`flex items-center gap-1 text-slate-100 ${isTouch ? 'px-2 py-1.5' : 'gap-2 px-3 py-2'}`}>
-      <span aria-hidden="true" className={isTouch ? 'text-xl leading-none' : 'text-3xl leading-none'}>
+      <span aria-hidden="true" className={isTouch ? 'text-[2.5rem] leading-none' : 'text-[3.75rem] leading-none'}>
         🪙
       </span>
       <span
         className="font-bold tabular-nums"
         style={{
-          fontSize: isTouch ? '0.85rem' : '1.125rem',
+          fontSize: isTouch ? '1.7rem' : '2.25rem',
           lineHeight: 1,
           color: '#ffd21e',
           letterSpacing: '-0.02em',
@@ -278,7 +279,7 @@ function RightCenterWins() {
           paintOrder: 'stroke fill',
         }}
       >
-        {formatCompact(wins)}
+        {formatCompact(coins)}
       </span>
     </div>
   )
@@ -286,14 +287,14 @@ function RightCenterWins() {
   if (isTouch) {
     return (
       <div data-hud="right-center" className="pointer-events-none absolute right-4 top-24 flex flex-col items-end gap-2">
-        {winsPill}
+        {coinsPill}
       </div>
     )
   }
 
   return (
     <div data-hud="right-center" className="pointer-events-none absolute right-4 top-1/2 flex -translate-y-1/2 flex-col items-center gap-3">
-      {winsPill}
+      {coinsPill}
     </div>
   )
 }
@@ -387,7 +388,7 @@ export default function Hud() {
 
       <LeftCenterControls />
 
-      <RightCenterWins />
+      <RightCenterCoins />
 
       {/* Top-left identity chip: dev-only diagnostic — renders null
          otherwise. Event-driven, never per frame. */}
@@ -406,6 +407,9 @@ export default function Hud() {
 
       {/* Top-centre "LEVEL UP!" banner. */}
       <LevelUpPopup />
+
+      {/* Top-centre glass-bridge countdown, Bonus Scene only. */}
+      <BonusTimer />
 
       {/* Top-centre multiplayer status pill — renders nothing while
          systems/net.js's stub stays 'idle' (no backend configured). */}

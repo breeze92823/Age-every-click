@@ -35,12 +35,14 @@ export const SPAWN_PAD = { x: SPAWN.x / ISLAND_SCALE, z: SPAWN.z / ISLAND_SCALE 
 // flat black.
 const AGE_MACHINE_TIERS = [
   { name: 'Basic', rate: '+1 Age/s', color: '#eef1f6', price: 100 },
-  { name: 'Double', rate: '+2 Age/s', color: '#9096a1' },
-  { name: 'Gold', rate: '+3 Age/s', color: '#ffcb3d' },
-  { name: 'VIP', rate: '+4 Age/s', color: '#ff5b7f' },
-  { name: 'Diamond', rate: '+5 Age/s', color: '#5fc9ff' },
-  { name: 'Emerald', rate: '+6 Age/s', color: '#3ddb6a' },
-  { name: 'Molten', rate: '+7 Age/s', color: '#231710', emissive: '#ff5a1f', emissiveIntensity: 0.6 },
+  { name: 'Double', rate: '+2 Age/s', color: '#9096a1', price: 2000 },
+  { name: 'Gold', rate: '+3 Age/s', color: '#ffcb3d', price: 3500 },
+  // No coins price — locked behind a different currency that isn't wired up
+  // yet, so the buy banner shows priceLabel instead of a coin amount.
+  { name: 'VIP', rate: '+4 Age/s', color: '#ff5b7f', priceLabel: 'Cannot buy with coin' },
+  { name: 'Diamond', rate: '+5 Age/s', color: '#5fc9ff', price: 6500 },
+  { name: 'Emerald', rate: '+6 Age/s', color: '#3ddb6a', price: 8000 },
+  { name: 'Molten', rate: '+7 Age/s', color: '#231710', emissive: '#ff5a1f', emissiveIntensity: 0.6, price: 9500 },
 ]
 
 export const AGE_MACHINES = {

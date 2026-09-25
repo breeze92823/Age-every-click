@@ -90,9 +90,9 @@ export function makeTierLabelTexture(name, rate, { nameColor = '#ffffff', stroke
   return { texture, aspect: w / h }
 }
 
-// White capsule badge with a procedural coin icon + price text — the Age
-// Machine buy banner's price tag. No image asset, same reasoning as the
-// rest of this file.
+// Translucent black capsule badge with a procedural coin icon + price text —
+// the Age Machine buy banner's price tag. No image asset, same reasoning as
+// the rest of this file.
 export function makePriceTagTexture(text, { px = 96 } = {}) {
   const canvas = document.createElement('canvas')
   const g = canvas.getContext('2d')
@@ -111,7 +111,7 @@ export function makePriceTagTexture(text, { px = 96 } = {}) {
   const lw = px * 0.16
   g.lineJoin = 'round'
   roundedRectPath(g, lw / 2, lw / 2, w - lw, h - lw, h / 2 - lw / 2)
-  g.fillStyle = '#ffffff'
+  g.fillStyle = 'rgba(0, 0, 0, 0.55)'
   g.fill()
   g.lineWidth = lw
   g.strokeStyle = '#1b1b1f'
@@ -135,7 +135,7 @@ export function makePriceTagTexture(text, { px = 96 } = {}) {
   g.font = font
   g.textAlign = 'left'
   g.textBaseline = 'middle'
-  g.fillStyle = '#2a3550'
+  g.fillStyle = '#ffffff'
   g.fillText(text, padX + coinD + gap, cy + px * 0.03)
 
   const texture = new THREE.CanvasTexture(canvas)
@@ -144,15 +144,15 @@ export function makePriceTagTexture(text, { px = 96 } = {}) {
   return { texture, aspect: w / h }
 }
 
-// Rounded, outlined green "Buy" button — the Age Machine buy banner's
-// clickable half.
-export function makeBuyButtonTexture({ px = 96 } = {}) {
+// Rounded, outlined green button — the Age Machine buy banner's clickable
+// half. `label` switches from "Buy" to "Use" once the machine is owned.
+export function makeBuyButtonTexture({ label = 'Buy', px = 96 } = {}) {
   const canvas = document.createElement('canvas')
   const g = canvas.getContext('2d')
   const font = `900 ${px}px ${LABEL_FONT}`
   g.font = font
   const padX = px * 0.7
-  const textW = g.measureText('Buy').width
+  const textW = g.measureText(label).width
   const h = Math.ceil(px * 1.4)
   const w = Math.ceil(textW + padX * 2)
   canvas.width = w
@@ -175,9 +175,44 @@ export function makeBuyButtonTexture({ px = 96 } = {}) {
   g.textBaseline = 'middle'
   g.lineWidth = px * 0.13
   g.strokeStyle = '#1b1b1f'
-  g.strokeText('Buy', w / 2, h / 2 + px * 0.02)
+  g.strokeText(label, w / 2, h / 2 + px * 0.02)
   g.fillStyle = '#ffffff'
-  g.fillText('Buy', w / 2, h / 2 + px * 0.02)
+  g.fillText(label, w / 2, h / 2 + px * 0.02)
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.anisotropy = 4
+  return { texture, aspect: w / h }
+}
+
+// Translucent black pill with centered text, no coin icon — the price tag's
+// slot once a machine is owned, reading e.g. "Owned".
+export function makeStatusTagTexture(text, { px = 96 } = {}) {
+  const canvas = document.createElement('canvas')
+  const g = canvas.getContext('2d')
+  const font = `900 ${px}px ${LABEL_FONT}`
+  g.font = font
+  const padX = px * 0.55
+  const textW = g.measureText(text).width
+  const h = Math.ceil(px * 1.55)
+  const w = Math.ceil(textW + padX * 2)
+  canvas.width = w
+  canvas.height = h
+
+  const lw = px * 0.16
+  g.lineJoin = 'round'
+  roundedRectPath(g, lw / 2, lw / 2, w - lw, h - lw, h / 2 - lw / 2)
+  g.fillStyle = 'rgba(0, 0, 0, 0.55)'
+  g.fill()
+  g.lineWidth = lw
+  g.strokeStyle = '#1b1b1f'
+  g.stroke()
+
+  g.font = font
+  g.textAlign = 'center'
+  g.textBaseline = 'middle'
+  g.fillStyle = '#8fffa0'
+  g.fillText(text, w / 2, h / 2 + px * 0.03)
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
