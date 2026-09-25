@@ -1,6 +1,6 @@
 import { OBBY } from '../data/island.js'
 import { ISLAND_SCALE, SPAWN } from '../data/world.js'
-import { SPAWN as BONUS_SPAWN } from '../data/bonusBridge.js'
+import { SPAWN as BONUS_SPAWN, SPAWN_FACING as BONUS_SPAWN_FACING } from '../data/bonusBridge.js'
 import { EXIT_PAD as STUD_JUMPS_EXIT_PAD, SPAWN as STUD_JUMPS_SPAWN } from '../data/studJumpsScene.js'
 import { EXIT_PAD as TSUNAMI_EXIT_PAD, SPAWN as TSUNAMI_SPAWN } from '../data/tsunamiScene.js'
 
@@ -23,8 +23,9 @@ const TO_BONUS = { x: OBBY.x, z: IMPOSSIBLE_BRIDGE.z, radius: 1.3 }
 const TO_STUD_JUMPS = { x: OBBY.x, z: STUD_JUMPS.z, radius: 1.3 }
 const TO_TSUNAMI = { x: OBBY.x, z: TSUNAMI_ESCAPE.z, radius: 1.3 }
 
-// Returns { scene, spawn } to teleport into this frame, or null if the
-// player isn't standing on any trigger.
+// Returns { scene, spawn, facing? } to teleport into this frame, or null if
+// the player isn't standing on any trigger. facing is only set where a scene
+// wants something other than resetPlayer's default (Math.PI).
 export function checkScenePortal(worldX, worldZ, currentScene) {
   if (currentScene === 'island') {
     const lx = worldX / ISLAND_SCALE
@@ -32,7 +33,7 @@ export function checkScenePortal(worldX, worldZ, currentScene) {
     const dxBonus = lx - TO_BONUS.x
     const dzBonus = lz - TO_BONUS.z
     if (dxBonus * dxBonus + dzBonus * dzBonus <= TO_BONUS.radius * TO_BONUS.radius) {
-      return { scene: 'bonus', spawn: BONUS_SPAWN }
+      return { scene: 'bonus', spawn: BONUS_SPAWN, facing: BONUS_SPAWN_FACING }
     }
     const dxStud = lx - TO_STUD_JUMPS.x
     const dzStud = lz - TO_STUD_JUMPS.z

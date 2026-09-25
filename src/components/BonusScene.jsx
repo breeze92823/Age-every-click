@@ -231,9 +231,8 @@ function ExitPad() {
   )
 }
 
-// Green pad just past the finish platform's entrance — stepping onto it is
-// what actually pays out and returns to the island (systems/bonusBridge.js's
-// onFinishPad), not just being anywhere on the platform.
+// Yellow pad on the finish platform — stepping onto it sends the player
+// back to the island (no payout; EXIT_PAD is the one that pays out).
 function FinishPad() {
   const { x, z, size } = FINISH_PAD
   return (
@@ -241,7 +240,7 @@ function FinishPad() {
       <Beam size={[size + 0.2, 0.08, size + 0.2]} position={[0, 0.04, 0]} color="#ffffff" opacity={1} />
       <mesh position={[0, 0.1, 0]} receiveShadow>
         <boxGeometry args={[size, 0.08, size]} />
-        <meshStandardMaterial color="#3fd05a" {...MATERIAL_PBR.PROP} />
+        <meshStandardMaterial color="#ffd23d" {...MATERIAL_PBR.PROP} />
       </mesh>
     </group>
   )
@@ -299,7 +298,6 @@ function FinishSign() {
         <boxGeometry args={[1.3, 0.7, 0.12]} />
         <meshStandardMaterial color={WOOD} {...MATERIAL_PBR.DECOR} />
       </mesh>
-      <Label text="FINISH" color="#ffd23d" position={[0, 1.95, 0]} height={0.5} />
     </group>
   )
 }

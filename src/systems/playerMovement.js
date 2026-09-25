@@ -148,7 +148,7 @@ export function step(dt) {
     if (portal.scene === 'bonus') resetBonusBridge()
     if (portal.scene === 'tsunami') resetTsunami()
     useGameStore.getState().setScene(portal.scene)
-    resetPlayer(portal.spawn)
+    resetPlayer(portal.spawn, portal.facing)
     syncYawToPlayer()
   }
 }

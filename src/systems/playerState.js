@@ -12,7 +12,7 @@ export const player = {
   dims: { radius: 0.4, height: 1.8 },
 }
 
-export function resetPlayer(spawn = { x: 0, y: 0, z: 0 }) {
+export function resetPlayer(spawn = { x: 0, y: 0, z: 0 }, facing = Math.PI) {
   player.position.x = spawn.x
   player.position.y = spawn.y
   player.position.z = spawn.z
@@ -20,5 +20,5 @@ export function resetPlayer(spawn = { x: 0, y: 0, z: 0 }) {
   player.velocity.y = 0
   player.velocity.z = 0
   player.grounded = true
-  player.facing = Math.PI
+  player.facing = facing
 }

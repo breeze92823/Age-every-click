@@ -5,12 +5,14 @@ import {
   END_RECT,
   SPAWN_RECT,
   EXIT_PAD,
+  FINISH_PAD,
   TILE_SIZE,
   LANE_X,
   COLUMN_PITCH,
   FIRST_COLUMN_Z,
   COLUMNS,
   SPAWN,
+  SPAWN_FACING,
   TIME_LIMIT,
   REWARD_COINS,
   FALL_RESET_Y,
@@ -84,11 +86,17 @@ function supports(t, x, z) {
   return !t.broken && Math.abs(x - t.x) <= half && Math.abs(z - t.z) <= half
 }
 
-// The yellow pad (EXIT_PAD) is the real finish trigger: it pays out and
-// returns to island in one step, rather than just returning with no reward.
-function onFinishPad(x, z) {
+// EXIT_PAD (yellow, spawn platform) pays out and returns to island in one
+// step. FINISH_PAD (yellow, finish platform) just returns to island, no
+// payout — see the two checks in stepBonusBridge below.
+function onExitPad(x, z) {
   const half = EXIT_PAD.size / 2
   return Math.abs(x - EXIT_PAD.x) <= half && Math.abs(z - EXIT_PAD.z) <= half
+}
+
+function onFinishPad(x, z) {
+  const half = FINISH_PAD.size / 2
+  return Math.abs(x - FINISH_PAD.x) <= half && Math.abs(z - FINISH_PAD.z) <= half
 }
 
 // Top surface height under (x, z), or -Infinity over the void.
@@ -101,7 +109,7 @@ export function bonusGroundAt(x, z) {
 function respawnAtStart() {
   playActionFail()
   resetBonusBridge()
-  resetPlayer(SPAWN)
+  resetPlayer(SPAWN, SPAWN_FACING)
   syncYawToPlayer()
 }
 
@@ -127,9 +135,17 @@ export function stepBonusBridge(dt) {
     }
   }
 
-  if (player.grounded && onFinishPad(p.x, p.z)) {
+  if (player.grounded && onExitPad(p.x, p.z)) {
     useGameStore.getState().awardCoins(REWARD_COINS)
     playLevelUp()
+    running = false
+    useGameStore.getState().setScene('island')
+    resetPlayer(ISLAND_SPAWN)
+    syncYawToPlayer()
+    return true
+  }
+
+  if (player.grounded && onFinishPad(p.x, p.z)) {
     running = false
     useGameStore.getState().setScene('island')
     resetPlayer(ISLAND_SPAWN)

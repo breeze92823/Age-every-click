@@ -4,11 +4,12 @@ import { GROUND_Y } from './world.js'
 // world metres (no ISLAND_SCALE). Two physical platforms — Start (far, -Z)
 // and Finish/end (near, close to the portal in) — named for their position,
 // not their gameplay role: SPAWN_RECT/FINISH_RECT below name which platform
-// the tiles/timer treat as the start vs the finish of the course. The real
-// win trigger is EXIT_PAD (on the spawn platform), not a pad on FINISH_RECT
-// — see EXIT_PAD's comment below. The player's actual SPAWN point, near the
-// bottom of this file, is placed beside the (decorative) FINISH_PAD, by
-// request, so it's on the opposite platform from EXIT_PAD.
+// the tiles/timer treat as the start vs the finish of the course. There are
+// two pads, both yellow: EXIT_PAD (spawn platform) pays out and returns to
+// island; FINISH_PAD (finish platform) just returns, no payout — see each
+// one's comment below. The player's actual SPAWN point, near the bottom of
+// this file, is placed beside FINISH_PAD, by request, so it's on the
+// opposite platform from EXIT_PAD.
 
 export const START_RECT = [-5, -30, 5, -20]
 export const END_RECT = [-3.5, -4, 3.5, 4]
@@ -40,13 +41,20 @@ export const BRIDGE_RECT = [-2.75, START_RECT[3], 2.75, END_RECT[1]]
 // platform.
 export const EXIT_PAD = { x: -2, z: SPAWN_RECT[1] + 5.8, size: 1.6 }
 
-// Green pad on the finish platform, just past its bridge-facing edge (z1).
-// Purely decorative — it marks the far end of the course, but the actual
-// win trigger is EXIT_PAD above.
-export const FINISH_PAD = { x: 0, z: FINISH_RECT[3] - 2, size: 1.8 }
+// Yellow pad on the finish platform: stepping on it sends the player back
+// to the island, with no payout (EXIT_PAD is the one that pays out).
+export const FINISH_PAD = { x: 0, z: FINISH_RECT[3] - 8, size: 1.8 }
 
-// Just beside the (decorative) finish pad, on the finish platform.
-export const SPAWN = { x: FINISH_PAD.x, y: GROUND_Y, z: FINISH_PAD.z - FINISH_PAD.size / 2 - 0.6 }
+// Just beside the finish pad, on the finish platform, and outside its
+// trigger box (half-size 0.9) so a fresh spawn doesn't bounce straight
+// back to the island.
+export const SPAWN = { x: FINISH_PAD.x, y: GROUND_Y, z: FINISH_PAD.z+5 }
+
+// Yaw the player (and so the camera, via syncYawToPlayer) faces on spawn —
+// 0 looks toward +Z, i.e. back across the tile columns (they sit at
+// z -5.5..-18.5, all less negative/"ahead" of SPAWN's z), rather than the
+// default Math.PI every other spawn point in the game uses.
+export const SPAWN_FACING = 0
 
 export const TIME_LIMIT = 15 // seconds, counted from leaving the spawn platform
 export const REWARD_COINS = 200
