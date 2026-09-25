@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { GROUND_Y, SPAWN as ISLAND_SPAWN } from '../data/world.js'
+import { GROUND_Y, SPAWN as ISLAND_SPAWN, SPAWN_FACING as ISLAND_SPAWN_FACING } from '../data/world.js'
 import {
   START_RECT,
   END_RECT,
@@ -140,7 +140,7 @@ export function stepBonusBridge(dt) {
     playLevelUp()
     running = false
     useGameStore.getState().setScene('island')
-    resetPlayer(ISLAND_SPAWN)
+    resetPlayer(ISLAND_SPAWN, ISLAND_SPAWN_FACING)
     syncYawToPlayer()
     return true
   }
@@ -148,7 +148,7 @@ export function stepBonusBridge(dt) {
   if (player.grounded && onFinishPad(p.x, p.z)) {
     running = false
     useGameStore.getState().setScene('island')
-    resetPlayer(ISLAND_SPAWN)
+    resetPlayer(ISLAND_SPAWN, ISLAND_SPAWN_FACING)
     syncYawToPlayer()
     return true
   }

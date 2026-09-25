@@ -1,4 +1,4 @@
-import { GROUND_Y, SPAWN as ISLAND_SPAWN } from '../data/world.js'
+import { GROUND_Y, SPAWN as ISLAND_SPAWN, SPAWN_FACING as ISLAND_SPAWN_FACING } from '../data/world.js'
 import {
   OUTER_RECT,
   PIT_RECT,
@@ -122,7 +122,7 @@ export function stepTsunami(dt) {
   if (hitByWave(p)) {
     playActionFail()
     useGameStore.getState().setScene('island')
-    resetPlayer(ISLAND_SPAWN)
+    resetPlayer(ISLAND_SPAWN, ISLAND_SPAWN_FACING)
     syncYawToPlayer()
     return true
   }
@@ -131,7 +131,7 @@ export function stepTsunami(dt) {
     useGameStore.getState().awardCoins(REWARD_COINS)
     playLevelUp()
     useGameStore.getState().setScene('island')
-    resetPlayer(ISLAND_SPAWN)
+    resetPlayer(ISLAND_SPAWN, ISLAND_SPAWN_FACING)
     syncYawToPlayer()
     return true
   }

@@ -94,6 +94,16 @@ export const useGameStore = create((set, get) => ({
   wheelOpen: false,
   ageBoostUntil: 0,
 
+  // 'boy' | 'girl' | null. Chosen in components/hud/GenderPicker.jsx at the
+  // start of every session; null means "not asked yet" and freezes the player.
+  // Deliberately transient: not in net.js's progressPayload(), resetProgress
+  // leaves it alone, so it is asked again on each load.
+  gender: null,
+
+  setGender(gender) {
+    set({ gender })
+  },
+
   openWheel() {
     set({ wheelOpen: true })
   },

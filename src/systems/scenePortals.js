@@ -1,5 +1,5 @@
 import { OBBY } from '../data/island.js'
-import { ISLAND_SCALE, SPAWN } from '../data/world.js'
+import { ISLAND_SCALE, SPAWN, SPAWN_FACING } from '../data/world.js'
 import { SPAWN as BONUS_SPAWN, SPAWN_FACING as BONUS_SPAWN_FACING } from '../data/bonusBridge.js'
 import { EXIT_PAD as STUD_JUMPS_EXIT_PAD, SPAWN as STUD_JUMPS_SPAWN } from '../data/studJumpsScene.js'
 import { EXIT_PAD as TSUNAMI_EXIT_PAD, SPAWN as TSUNAMI_SPAWN } from '../data/tsunamiScene.js'
@@ -90,12 +90,12 @@ export function checkScenePortal(worldX, worldZ, currentScene, interactHeld, dt)
   } else if (currentScene === 'studJumps') {
     const half = STUD_JUMPS_EXIT_PAD.size / 2
     if (Math.abs(worldX - STUD_JUMPS_EXIT_PAD.x) <= half && Math.abs(worldZ - STUD_JUMPS_EXIT_PAD.z) <= half) {
-      return { scene: 'island', spawn: SPAWN }
+      return { scene: 'island', spawn: SPAWN, facing: SPAWN_FACING }
     }
   } else if (currentScene === 'tsunami') {
     const half = TSUNAMI_EXIT_PAD.size / 2
     if (Math.abs(worldX - TSUNAMI_EXIT_PAD.x) <= half && Math.abs(worldZ - TSUNAMI_EXIT_PAD.z) <= half) {
-      return { scene: 'island', spawn: SPAWN }
+      return { scene: 'island', spawn: SPAWN, facing: SPAWN_FACING }
     }
   }
   return null

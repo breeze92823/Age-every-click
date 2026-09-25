@@ -10,6 +10,7 @@ import { useGameStore } from '../store/useGameStore.js'
 import { makeGait, updateGait, disposeGait } from '../systems/avatarAnim.js'
 import { updateHair } from '../systems/hairPhysics.js'
 import { useAuth } from './hud/hooks.js'
+import CharacterConfetti, { burstConfetti } from './CharacterConfetti.jsx'
 
 const _up = new Vector3(0, 1, 0)
 const _targetQuat = new Quaternion()
@@ -20,12 +21,14 @@ const TURN_RATE = 0.001 // base of 1 - TURN_RATE^delta; smaller = snappier turn
 // equipped Bloxity hat and back item are attached to it as accessories.
 // Rebuilds whenever the outfit changes or the player edits their avatar in
 // the customizer.
-function useBloxityAvatar(outfit) {
+function useBloxityAvatar(outfit, gender) {
   useAuth()
-  const [avatar, setAvatar] = useState(() => buildDefaultCharacter(outfit))
+  const [avatar, setAvatar] = useState(() => buildDefaultCharacter(outfit, gender))
   const signedIn = !!authState.user
   const outfitRef = useRef(outfit)
   outfitRef.current = outfit
+  const genderRef = useRef(gender)
+  genderRef.current = gender
   const currentRef = useRef(null)
   const firstRun = useRef(true)
 
@@ -33,20 +36,24 @@ function useBloxityAvatar(outfit) {
     let cancelled = false
     const controller = new AbortController()
 
-    async function load() {
-      const group = buildDefaultCharacter(outfitRef.current)
+    // celebrate: this rebuild is a visible character change (new outfit,
+    // edited avatar, sign in/out), not the first load — pop the confetti.
+    async function load(celebrate) {
+      const group = buildDefaultCharacter(outfitRef.current, genderRef.current)
       const equipped = signedIn && !DEV_MODE ? getEquippedAvatar() : null
       await attachEquippedAccessories(group, equipped, { signal: controller.signal })
       if (cancelled) return
       currentRef.current = group
       applyProportions(group, getProportions())
       setAvatar(group)
+      if (celebrate) burstConfetti()
     }
     // The initial state already holds the bare character for this outfit.
-    if (firstRun.current && !signedIn) firstRun.current = false
-    else load()
+    const initial = firstRun.current
+    firstRun.current = false
+    if (!(initial && !signedIn)) load(!initial)
 
-    const offAvatar = onAvatarChanged(() => load())
+    const offAvatar = onAvatarChanged(() => load(true))
     const offProportions = onProportionsChanged(() => {
       if (currentRef.current) applyProportions(currentRef.current, getProportions())
     })
@@ -57,7 +64,7 @@ function useBloxityAvatar(outfit) {
       offAvatar()
       offProportions()
     }
-  }, [signedIn, outfit])
+  }, [signedIn, outfit, gender])
 
   return avatar
 }
@@ -70,7 +77,9 @@ function useBloxityAvatar(outfit) {
 export default function Player() {
   const ref = useRef()
   const outfit = useGameStore((s) => outfitForLevel(s.level))
-  const avatar = useBloxityAvatar(outfit)
+  // null (picker still up) renders as the boy, so choosing Boy changes nothing.
+  const gender = useGameStore((s) => s.gender ?? 'boy')
+  const avatar = useBloxityAvatar(outfit, gender)
   const gaitRef = useRef(null)
 
   // Rebuilt per loaded avatar — the gait's cached bind-pose quaternions
@@ -102,8 +111,11 @@ export default function Player() {
   })
 
   return (
-    <group ref={ref}>
-      <primitive object={avatar} />
-    </group>
+    <>
+      <group ref={ref}>
+        <primitive object={avatar} />
+      </group>
+      <CharacterConfetti />
+    </>
   )
 }

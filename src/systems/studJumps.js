@@ -1,4 +1,4 @@
-import { GROUND_Y, SPAWN as ISLAND_SPAWN } from '../data/world.js'
+import { GROUND_Y, SPAWN as ISLAND_SPAWN, SPAWN_FACING as ISLAND_SPAWN_FACING } from '../data/world.js'
 import { START_RECT, STEPS, SPAWN, FALL_RESET_Y, FLAG_RADIUS } from '../data/studJumpsScene.js'
 import { player, resetPlayer } from './playerState.js'
 import { syncYawToPlayer } from './cameraOrbit.js'
@@ -75,7 +75,7 @@ export function stepStudJumps() {
     useGameStore.getState().awardCoins(flag.reward)
     playLevelUp()
     useGameStore.getState().setScene('island')
-    resetPlayer(ISLAND_SPAWN)
+    resetPlayer(ISLAND_SPAWN, ISLAND_SPAWN_FACING)
     syncYawToPlayer()
     return true
   }
