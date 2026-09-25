@@ -236,6 +236,7 @@ function ToolbarButton({ icon, label, onClick, isTouch }) {
           fontSize: isTouch ? '2.25rem' : '3rem',
           WebkitTextStroke: '5px black',
           paintOrder: 'stroke fill',
+          filter: 'brightness(1.35) saturate(1.3) drop-shadow(0 0 6px rgba(255,255,255,0.5))',
         }}
       >
         {icon}
@@ -261,7 +262,11 @@ function RightCenterCoins() {
 
   const coinsPill = (
     <div className={`flex items-center gap-1 text-slate-100 ${isTouch ? 'px-2 py-1.5' : 'gap-2 px-3 py-2'}`}>
-      <span aria-hidden="true" className={isTouch ? 'text-[2.5rem] leading-none' : 'text-[3.75rem] leading-none'}>
+      <span
+        aria-hidden="true"
+        className={isTouch ? 'text-[2.5rem] leading-none' : 'text-[3.75rem] leading-none'}
+        style={{ filter: 'brightness(1.35) saturate(1.3) drop-shadow(0 0 6px rgba(255,210,30,0.6))' }}
+      >
         🪙
       </span>
       <span
