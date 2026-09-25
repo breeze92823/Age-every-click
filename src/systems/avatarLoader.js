@@ -1,36 +1,22 @@
-// Assembles a signed-in player's real Bloxity avatar from the CDN: the base
-// rig, each equipped body-part GLB skinned onto its shared skeleton, the
-// skin texture, and hat/back .obj accessories clipped to a bone. Framework-
-// free (no React) so it can be unit-tested and reused outside components/.
+// Attaches a signed-in player's equipped Bloxity hat and back accessory (.obj
+// files from the CDN) to the game's own default character. Only the
+// accessories come from Bloxity: the base rig, body parts and skin are never
+// loaded, so the character itself is always the game's (systems/
+// defaultCharacter.js). Framework-free (no React) so it can be reused outside
+// components/.
 //
 // Same rule as systems/bloxity.js: nothing here may throw outward. A blocked
-// CDN or a missing/mismatched part is logged and skipped rather than
-// crashing the load — components/Player.jsx falls back to the default
-// capsule whenever this resolves to null, or for any slot that didn't load.
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+// CDN or a failed accessory is logged and skipped, leaving the character bare.
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { TextureLoader, MeshStandardMaterial } from 'three'
 import { MATERIAL_PBR } from '../data/materials.js'
 import { RIG_HEIGHT } from '../data/bloxity.js'
 import { player } from './playerState.js'
-import {
-  baseRigUrl,
-  partUrl,
-  skinUrl,
-  hatObjUrl,
-  hatTextureUrl,
-  backObjUrl,
-  backTextureUrl,
-  isEquipped,
-} from '../data/avatarCdn.js'
+import { hatObjUrl, hatTextureUrl, backObjUrl, backTextureUrl } from '../data/avatarCdn.js'
 
-const gltfLoader = new GLTFLoader()
 const objLoader = new OBJLoader()
 const textureLoader = new TextureLoader()
 
-function loadGltf(url) {
-  return new Promise((resolve, reject) => gltfLoader.load(url, resolve, undefined, reject))
-}
 function loadObj(url) {
   return new Promise((resolve, reject) => objLoader.load(url, resolve, undefined, reject))
 }
@@ -50,48 +36,12 @@ function findBone(skeleton, namePattern) {
   return skeleton.bones.find((b) => namePattern.test(b.name)) || null
 }
 
-// The SDK pre-authors every part GLB against the exact same bone names as
-// avatars/player.glb, so attaching one is a name lookup + skinIndex remap,
-// not a retarget. Returns false (part skipped) on any bone-name mismatch —
-// rendering a part against the wrong indices would warp it silently, which
-// is worse than just not showing it.
-function attachPartToBaseSkeleton(partMesh, baseSkeleton) {
-  const nameToBaseIndex = new Map()
-  baseSkeleton.bones.forEach((bone, i) => nameToBaseIndex.set(bone.name, i))
-
-  const partBones = partMesh.skeleton.bones
-  const remapped = new Uint16Array(partBones.length)
-  for (let i = 0; i < partBones.length; i++) {
-    const baseIndex = nameToBaseIndex.get(partBones[i].name)
-    if (baseIndex === undefined) return false
-    remapped[i] = baseIndex
-  }
-
-  const skinIndex = partMesh.geometry.getAttribute('skinIndex')
-  const arr = skinIndex.array
-  for (let i = 0; i < arr.length; i++) arr[i] = remapped[arr[i]]
-  skinIndex.needsUpdate = true
-
-  partMesh.bind(baseSkeleton, partMesh.bindMatrix)
-  return true
-}
-
-function applySkinTexture(root, texture) {
-  texture.flipY = false
-  root.traverse((o) => {
-    if (!o.isMesh) return
-    o.material = new MeshStandardMaterial({ map: texture, ...MATERIAL_PBR.PLAYER })
-  })
-}
-
-// Loads one hat/back accessory and clips it to the first bone matching
-// `boneNamePattern` (best-effort — the SDK's exact hat/back attachment bone
-// isn't documented, so this matches on a plausible name rather than a
-// confirmed one). Silently no-ops if no matching bone exists.
-async function attachAccessory(skeleton, boneNamePattern, objUrl, textureUrl) {
-  if (!objUrl) return
-  const bone = findBone(skeleton, boneNamePattern)
-  if (!bone) return
+// Loads one hat/back accessory and clips it to `bone` (best-effort — the
+// SDK's exact hat/back attachment offset isn't documented, so the model is
+// added in the bone's local space as-is). Silently no-ops on a missing bone
+// or a failed load.
+async function attachAccessory(bone, objUrl, textureUrl) {
+  if (!objUrl || !bone) return
   try {
     const obj = await loadObj(objUrl)
     let texture = null
@@ -114,87 +64,18 @@ async function attachAccessory(skeleton, boneNamePattern, objUrl, textureUrl) {
   }
 }
 
-// `equipped` is the shape SDK.avatar.getEquipped() returns: hatId, backId,
-// skinId, headId, armLId, armRId, legLId, legRId, torsoId. `signal` (optional
-// AbortSignal) lets a caller cancel a stale load (e.g. the player logged out
-// or changed avatars again) without racing a slower-to-resolve part onto the
-// scene after the fact.
-export async function assembleAvatar(equipped, { signal } = {}) {
-  if (!equipped) return null
-
-  let baseGltf
-  try {
-    baseGltf = await loadGltf(baseRigUrl())
-  } catch (err) {
-    console.warn('[avatarLoader] base rig failed to load', err)
-    return null
-  }
-  if (signal?.aborted) return null
-
-  const root = baseGltf.scene
-  // Only the base rig carries animation clips (idle/walk/...) — every part
-  // GLB is a static skinned mesh meant to ride the base rig's skeleton, per
-  // attachPartToBaseSkeleton above. Stashed on the root (not a real
-  // Object3D field, just a convenient carrier) so components/Player.jsx can
-  // hand it straight to systems/avatarAnim.js without re-touching the
-  // loader. `nodes` is a name -> node lookup of the whole rig (bones
-  // included) — avatarAnim.js's generated walk cycle keys ArmL1/ArmR1/
-  // LegL1/LegR1/Spine1 by these exact names, per the shared Bloxity rig.
-  root.animations = baseGltf.animations || []
-  root.nodes = {}
-  root.traverse((o) => {
-    if (o.name) root.nodes[o.name] = o
-  })
-  const skeleton = findSkeleton(root)
-
-  if (skeleton) {
-    const slots = [
-      ['head', equipped.headId],
-      ['torso', equipped.torsoId],
-      ['armL', equipped.armLId],
-      ['armR', equipped.armRId],
-      ['legL', equipped.legLId],
-      ['legR', equipped.legRId],
-    ]
-    await Promise.all(
-      slots.map(async ([slot, id]) => {
-        const url = partUrl(slot, id)
-        if (!url) return
-        try {
-          const gltf = await loadGltf(url)
-          if (signal?.aborted) return
-          gltf.scene.traverse((o) => {
-            if (o.isSkinnedMesh && attachPartToBaseSkeleton(o, skeleton)) root.add(o)
-          })
-        } catch (err) {
-          console.warn(`[avatarLoader] part "${slot}" failed to load`, url, err)
-        }
-      }),
-    )
-  }
-  if (signal?.aborted) return null
-
-  if (isEquipped(equipped.skinId)) {
-    try {
-      const texture = await loadTexture(skinUrl(equipped.skinId))
-      if (signal?.aborted) return null
-      applySkinTexture(root, texture)
-    } catch (err) {
-      console.warn('[avatarLoader] skin texture failed to load', err)
-    }
-  }
-
-  if (skeleton) {
-    await attachAccessory(skeleton, /head/i, hatObjUrl(equipped.hatId), hatTextureUrl(equipped.hatId))
-    if (signal?.aborted) return null
-    await attachAccessory(skeleton, /spine|chest|back/i, backObjUrl(equipped.backId), backTextureUrl(equipped.backId))
-    if (signal?.aborted) return null
-  }
-
-  return root
+// `equipped` is the shape SDK.avatar.getEquipped() returns; only hatId and
+// backId are read. `root` is a character from buildDefaultCharacter(), whose
+// `nodes` map holds the head (Neck1) and back (Spine1) bones. `signal`
+// (optional AbortSignal) lets a caller cancel a stale load.
+export async function attachEquippedAccessories(root, equipped, { signal } = {}) {
+  if (!root || !equipped) return
+  await attachAccessory(root.nodes?.Neck1, hatObjUrl(equipped.hatId), hatTextureUrl(equipped.hatId))
+  if (signal?.aborted) return
+  await attachAccessory(root.nodes?.Spine1, backObjUrl(equipped.backId), backTextureUrl(equipped.backId))
 }
 
-// Rescales an already-assembled avatar per SDK.avatar.getProportions(). Safe
+// Rescales an already-built character per SDK.avatar.getProportions(). Safe
 // to call repeatedly (e.g. from onProportionsChanged) since it only mutates
 // existing bone transforms, no reload needed.
 //

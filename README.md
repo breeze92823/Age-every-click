@@ -32,7 +32,7 @@ Notes:
 - Age level is the highest Age milestone crossed (see `src/data/progression.js`). Levels 0–6 use hand-picked milestones (0, 5, 18, 30, 45, 70, 100); above that the curve grows smoothly to level 50,000 at 40 billion Age.
 - Characters follow the level, not the Age, so changing a milestone in `progression.js` changes the Age at which each character appears.
 - A rebirth that resets Age to 0 also returns the player to `plain`.
-- Signed-in players with an equipped Bloxity avatar keep their own avatar; it does not change with level.
+- The character is always the game's own; a signed-in player's Bloxity avatar never replaces it. Their equipped Bloxity hat and back item are still attached to it as accessories.
 
 Where it lives:
 
