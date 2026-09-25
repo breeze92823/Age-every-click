@@ -4,9 +4,7 @@ import { settings } from '../../systems/settingsState.js'
 import { playButtonClick, playButtonHover } from '../../systems/sfx.js'
 import { useGameStore } from '../../store/useGameStore.js'
 import { canAcceptRebirth, rebirthRequirement } from '../../data/progression.js'
-import { AURA_TIERS } from '../../data/aura.js'
 import { SHOP_ITEMS } from '../../data/shop.js'
-import { HEX_SPEED_PAD_TIERS } from '../../data/hexPowerPad.js'
 import { makeStudOverlayDataURL } from '../../systems/studTexture.js'
 import TouchControls from './TouchControls.jsx'
 import RotatePrompt from './RotatePrompt.jsx'
@@ -22,17 +20,10 @@ import { useSettings, useTouchMode } from './hooks.js'
 
 // This Hud is ported from Ice-Skate's components/hud/Hud.jsx: same LevelBar/
 // RebirthLevelBar/LevelUpPopup/ActionResult/NetStatus/IdentityChip/AuthPanel/
-// ActionPopups/TouchControls/RotatePrompt pieces, same Rebirth/Aura/Shop
-// toolbar+modal pattern, same sound calls. Two things don't carry over as-is
-// and are adapted rather than dropped:
-//  - Ice-Skate's Aura popup opens by walking up to a merchant NPC, and its
-//    Shop button is a kill-switched placeholder. Neither has an equivalent
-//    prop in this template, so both are just always-available toolbar
-//    buttons here instead, and Shop is left enabled.
-//  - Ice-Skate's "Skates" economy (HEX_SPEED_PAD_TIERS) is bought/equipped
-//    by walking up to a physical SkateRack prop. This template has no such
-//    prop, so it's a new SkatesWindow toolbar button instead — everything
-//    else (the tier data, the store actions) is unchanged.
+// ActionPopups/TouchControls/RotatePrompt pieces, same Rebirth/Shop
+// toolbar+modal pattern, same sound calls. Ice-Skate's Shop button is a
+// kill-switched placeholder; it has no equivalent prop in this template, so
+// it's just an always-available toolbar button here instead, left enabled.
 // Speed is not currently earned by any in-game action — the walking-based
 // gain from Ice-Skate (systems/speedGain.js) was removed since this game
 // has no such mechanic, and no click-to-gain button or Set Speed badge
@@ -53,9 +44,9 @@ function formatCompact(n) {
   return `${text}${suffix}`
 }
 
-// Shared chrome for every left-center HUD popup (Rebirth, Aura, Shop,
-// Skates): a transparent panel with the title floating above its top-left
-// corner and the close button overhanging its top-right corner.
+// Shared chrome for every left-center HUD popup (Rebirth, Shop): a
+// transparent panel with the title floating above its top-left corner and
+// the close button overhanging its top-right corner.
 function HudModal({ title, onClose, isTouch, children }) {
   return (
     <div
@@ -146,196 +137,6 @@ function RebirthWindow({ rebirth, canRebirth, onConfirm, onClose, isTouch }) {
         >
           {canRebirth ? 'Rebirth' : `Level ${requirement} needed`}
         </button>
-      </div>
-    </HudModal>
-  )
-}
-
-// One row of the Aura popup's tier list: icon on the left, name + strength
-// multiplier in the middle, one action button on the right.
-function AuraEntry({ tier, index, isTouch }) {
-  const wins = useGameStore((s) => s.wins)
-  const owned = useGameStore((s) => s.ownedAuras.has(index))
-  const equipped = useGameStore((s) => s.equippedAura === index)
-  const buyAuraTier = useGameStore((s) => s.buyAuraTier)
-  const equipAuraTier = useGameStore((s) => s.equipAuraTier)
-  const unequipAuraTier = useGameStore((s) => s.unequipAuraTier)
-  const canAfford = wins >= tier.winsRequired
-  const textOutlineLocal = { WebkitTextStroke: isTouch ? '1px black' : '1.5px black', paintOrder: 'stroke fill' }
-  return (
-    <div
-      className={`flex w-full shrink-0 items-center rounded-lg border-2 border-black bg-slate-800/80 ${isTouch ? 'gap-2 p-2' : 'gap-3 p-3'}`}
-    >
-      <div
-        className={`flex shrink-0 items-center justify-center overflow-hidden rounded-md border-2 border-slate-500 bg-slate-950 ${isTouch ? 'h-11 w-11' : 'h-16 w-16'}`}
-      >
-        <img src={tier.iconUrl} alt="" className="h-full w-full object-cover" draggable={false} loading="lazy" decoding="async" />
-      </div>
-
-      <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-        <span className={`font-black text-white ${isTouch ? 'text-sm' : 'text-xl'}`} style={textOutlineLocal}>
-          {tier.name}
-        </span>
-        <span className={`font-black text-amber-400 ${isTouch ? 'text-xs' : 'text-lg'}`} style={textOutlineLocal}>
-          x{tier.strengthMult} Speed
-        </span>
-      </div>
-
-      <div className={`flex shrink-0 flex-col ${isTouch ? 'gap-0.5' : 'gap-1'}`}>
-        {!owned && (
-          <button
-            type="button"
-            onClick={() => {
-              playButtonClick()
-              buyAuraTier(index)
-            }}
-            disabled={!canAfford}
-            className={`flex items-center justify-center gap-1 rounded-md border-2 border-black bg-gradient-to-b from-amber-300 to-amber-500 font-black text-white transition hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100 ${isTouch ? 'px-1.5 py-0.5 text-xs' : 'px-3 py-1 text-base'}`}
-            style={textOutlineLocal}
-          >
-            <span>🏆</span>
-            <span>{formatCompact(tier.winsRequired)}</span>
-          </button>
-        )}
-        {owned && !equipped && (
-          <button
-            type="button"
-            onClick={() => {
-              playButtonClick()
-              equipAuraTier(index)
-            }}
-            className={`flex items-center justify-center rounded-md border-2 border-black bg-gradient-to-b from-lime-400 to-green-600 font-black text-white transition hover:brightness-110 active:brightness-95 ${isTouch ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-base'}`}
-            style={textOutlineLocal}
-          >
-            Equip
-          </button>
-        )}
-        {owned && equipped && (
-          <>
-            <button
-              type="button"
-              disabled
-              className={`flex cursor-default items-center gap-1 rounded-md border-2 border-black bg-gradient-to-b from-sky-400 to-blue-600 font-black text-white ${isTouch ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-base'}`}
-              style={textOutlineLocal}
-            >
-              <span>✓</span>
-              <span>Equipped</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                playButtonClick()
-                unequipAuraTier(index)
-              }}
-              className={`flex items-center justify-center rounded-md border-2 border-black bg-gradient-to-b from-rose-400 to-rose-600 font-black text-white transition hover:brightness-110 active:brightness-95 ${isTouch ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-base'}`}
-              style={textOutlineLocal}
-            >
-              Unequip
-            </button>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function AuraWindow({ onClose, isTouch }) {
-  return (
-    <HudModal title="Aura" onClose={onClose} isTouch={isTouch}>
-      <div className={`w-full overflow-y-auto ${isTouch ? 'max-h-[38vh] pr-1' : 'max-h-[26rem] pr-2'}`}>
-        <div className={`flex flex-col ${isTouch ? 'gap-1.5' : 'gap-2.5'}`}>
-          {AURA_TIERS.map((tier, index) => (
-            <AuraEntry key={tier.name} tier={tier} index={index} isTouch={isTouch} />
-          ))}
-        </div>
-      </div>
-    </HudModal>
-  )
-}
-
-// One row of the Skates popup's tier list — same shape as AuraEntry, over
-// HEX_SPEED_PAD_TIERS instead. This is this template's stand-in for
-// Ice-Skate's physical SkateRack prop.
-function SkateEntry({ tier, index, isTouch }) {
-  const wins = useGameStore((s) => s.wins)
-  const owned = useGameStore((s) => s.ownedHexPads.has(index))
-  const equipped = useGameStore((s) => s.equippedHexPad === index)
-  const buyHexPad = useGameStore((s) => s.buyHexPad)
-  const equipHexPad = useGameStore((s) => s.equipHexPad)
-  const canAfford = wins >= tier.winsRequired
-  const textOutlineLocal = { WebkitTextStroke: isTouch ? '1px black' : '1.5px black', paintOrder: 'stroke fill' }
-  return (
-    <div
-      className={`flex w-full shrink-0 items-center rounded-lg border-2 border-black bg-slate-800/80 ${isTouch ? 'gap-2 p-2' : 'gap-3 p-3'}`}
-    >
-      <div
-        className={`flex shrink-0 items-center justify-center rounded-md border-2 border-slate-500 ${isTouch ? 'h-11 w-11' : 'h-16 w-16'}`}
-        style={{ background: tier.beamColor }}
-      />
-
-      <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-        <span className={`font-black text-white ${isTouch ? 'text-sm' : 'text-xl'}`} style={textOutlineLocal}>
-          Skate Tier {index + 1}
-        </span>
-        <span className={`font-black text-amber-400 ${isTouch ? 'text-xs' : 'text-lg'}`} style={textOutlineLocal}>
-          +{formatCompact(tier.speedPerGain)} Speed/click
-        </span>
-      </div>
-
-      <div className={`flex shrink-0 flex-col ${isTouch ? 'gap-0.5' : 'gap-1'}`}>
-        {!owned && (
-          <button
-            type="button"
-            onClick={() => {
-              playButtonClick()
-              buyHexPad(index)
-            }}
-            disabled={!canAfford}
-            className={`flex items-center justify-center gap-1 rounded-md border-2 border-black bg-gradient-to-b from-amber-300 to-amber-500 font-black text-white transition hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100 ${isTouch ? 'px-1.5 py-0.5 text-xs' : 'px-3 py-1 text-base'}`}
-            style={textOutlineLocal}
-          >
-            <span>🏆</span>
-            <span>{formatCompact(tier.winsRequired)}</span>
-          </button>
-        )}
-        {owned && !equipped && (
-          <button
-            type="button"
-            onClick={() => {
-              playButtonClick()
-              equipHexPad(index)
-            }}
-            className={`flex items-center justify-center rounded-md border-2 border-black bg-gradient-to-b from-lime-400 to-green-600 font-black text-white transition hover:brightness-110 active:brightness-95 ${isTouch ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-base'}`}
-            style={textOutlineLocal}
-          >
-            Equip
-          </button>
-        )}
-        {owned && equipped && (
-          <button
-            type="button"
-            disabled
-            className={`flex cursor-default items-center gap-1 rounded-md border-2 border-black bg-gradient-to-b from-sky-400 to-blue-600 font-black text-white ${isTouch ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-base'}`}
-            style={textOutlineLocal}
-          >
-            <span>✓</span>
-            <span>Equipped</span>
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function SkatesWindow({ onClose, isTouch }) {
-  return (
-    <HudModal title="Skates" onClose={onClose} isTouch={isTouch}>
-      <div className={`w-full overflow-y-auto ${isTouch ? 'max-h-[38vh] pr-1' : 'max-h-[26rem] pr-2'}`}>
-        <div className={`flex flex-col ${isTouch ? 'gap-1.5' : 'gap-2.5'}`}>
-          {HEX_SPEED_PAD_TIERS.map((tier, index) => (
-            <SkateEntry key={index} tier={tier} index={index} isTouch={isTouch} />
-          ))}
-        </div>
       </div>
     </HudModal>
   )
@@ -438,9 +239,7 @@ function ShopWindow({ onClose, isTouch }) {
 const TOOLBAR_BUTTON_STUD_PITCH = 14
 
 const REBIRTH_BUTTON_GRADIENT = 'linear-gradient(180deg, #FFA4FA 0%, #FF4BC2 100%)'
-const AURA_BUTTON_GRADIENT = 'linear-gradient(180deg, #a4fad4 0%, #1fbf7a 100%)'
 const SHOP_BUTTON_GRADIENT = 'linear-gradient(180deg, #ffe9a4 0%, #ff9d00 100%)'
-const SKATES_BUTTON_GRADIENT = 'linear-gradient(180deg, #a4d8fa 0%, #1f8dbf 100%)'
 
 function ToolbarButton({ gradient, studOverlay, icon, label, onClick, isTouch }) {
   return (
@@ -473,14 +272,14 @@ function ToolbarButton({ gradient, studOverlay, icon, label, onClick, isTouch })
 }
 
 // Left-edge, vertically centred stack: wins count above, a small toolbar of
-// economy panels below (Rebirth/Aura/Shop/Skates).
+// economy panels below (Rebirth/Shop).
 function LeftCenterControls() {
   const wins = useGameStore((s) => s.wins)
   const level = useGameStore((s) => s.level)
   const rebirth = useGameStore((s) => s.rebirth)
   const canRebirth = useGameStore((s) => canAcceptRebirth(s.level, s.rebirth))
   const acceptRebirth = useGameStore((s) => s.acceptRebirth)
-  const [openWindow, setOpenWindow] = useState(null) // null | 'rebirth' | 'aura' | 'shop' | 'skates'
+  const [openWindow, setOpenWindow] = useState(null) // null | 'rebirth' | 'shop'
   const isTouch = useTouchMode()
   const studOverlay = useMemo(() => `url(${makeStudOverlayDataURL(TOOLBAR_BUTTON_STUD_PITCH)})`, [])
 
@@ -497,9 +296,7 @@ function LeftCenterControls() {
         onClose={() => setOpenWindow(null)}
       />
     ),
-    aura: <AuraWindow isTouch={isTouch} onClose={() => setOpenWindow(null)} />,
     shop: <ShopWindow isTouch={isTouch} onClose={() => setOpenWindow(null)} />,
-    skates: <SkatesWindow isTouch={isTouch} onClose={() => setOpenWindow(null)} />,
   }[openWindow]
 
   const portal = modal && createPortal(modal, document.body)
@@ -531,22 +328,6 @@ function LeftCenterControls() {
         icon="⭐"
         label="Rebirth"
         onClick={() => setOpenWindow('rebirth')}
-        isTouch={isTouch}
-      />
-      <ToolbarButton
-        gradient={AURA_BUTTON_GRADIENT}
-        studOverlay={studOverlay}
-        icon="✨"
-        label="Aura"
-        onClick={() => setOpenWindow('aura')}
-        isTouch={isTouch}
-      />
-      <ToolbarButton
-        gradient={SKATES_BUTTON_GRADIENT}
-        studOverlay={studOverlay}
-        icon="⛸️"
-        label="Skates"
-        onClick={() => setOpenWindow('skates')}
         isTouch={isTouch}
       />
       <ToolbarButton

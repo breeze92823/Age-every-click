@@ -256,6 +256,33 @@ export function toggleCustomizer() {
   SDK.avatar.toggleCustomizer()
 }
 
+// Current equipped-item ids ({ hatId, backId, skinId, headId, armLId,
+// armRId, legLId, legRId, torsoId }) — components/Player.jsx feeds this
+// straight into systems/avatarLoader.js's assembleAvatar(). Null when the
+// SDK is unavailable or the call throws, same as every other accessor here.
+export function getEquippedAvatar() {
+  const SDK = sdk()
+  if (!SDK) return null
+  try {
+    return SDK.avatar.getEquipped()
+  } catch {
+    return null
+  }
+}
+
+// Fires whenever the player changes anything in the avatar customizer, so
+// Player.jsx can reload the 3D avatar in place. No-op unsubscribe if the SDK
+// or this listener isn't available, so callers never need to branch.
+export function onAvatarChanged(fn) {
+  const SDK = sdk()
+  if (!SDK || typeof SDK.avatar.onAvatarChanged !== 'function') return () => {}
+  try {
+    return SDK.avatar.onAvatarChanged(fn)
+  } catch {
+    return () => {}
+  }
+}
+
 // --- Social ---------------------------------------------------------------
 export async function inviteFriend(userId) {
   const SDK = sdk()

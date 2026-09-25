@@ -1,0 +1,180 @@
+// Assembles a signed-in player's real Bloxity avatar from the CDN: the base
+// rig, each equipped body-part GLB skinned onto its shared skeleton, the
+// skin texture, and hat/back .obj accessories clipped to a bone. Framework-
+// free (no React) so it can be unit-tested and reused outside components/.
+//
+// Same rule as systems/bloxity.js: nothing here may throw outward. A blocked
+// CDN or a missing/mismatched part is logged and skipped rather than
+// crashing the load — components/Player.jsx falls back to the default
+// capsule whenever this resolves to null, or for any slot that didn't load.
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
+import { TextureLoader, MeshStandardMaterial } from 'three'
+import { MATERIAL_PBR } from '../data/materials.js'
+import {
+  baseRigUrl,
+  partUrl,
+  skinUrl,
+  hatObjUrl,
+  hatTextureUrl,
+  backObjUrl,
+  backTextureUrl,
+  isEquipped,
+} from '../data/avatarCdn.js'
+
+const gltfLoader = new GLTFLoader()
+const objLoader = new OBJLoader()
+const textureLoader = new TextureLoader()
+
+function loadGltf(url) {
+  return new Promise((resolve, reject) => gltfLoader.load(url, resolve, undefined, reject))
+}
+function loadObj(url) {
+  return new Promise((resolve, reject) => objLoader.load(url, resolve, undefined, reject))
+}
+function loadTexture(url) {
+  return new Promise((resolve, reject) => textureLoader.load(url, resolve, undefined, reject))
+}
+
+function findSkeleton(root) {
+  let skeleton = null
+  root.traverse((o) => {
+    if (!skeleton && o.isSkinnedMesh) skeleton = o.skeleton
+  })
+  return skeleton
+}
+
+function findBone(skeleton, namePattern) {
+  return skeleton.bones.find((b) => namePattern.test(b.name)) || null
+}
+
+// The SDK pre-authors every part GLB against the exact same bone names as
+// avatars/player.glb, so attaching one is a name lookup + skinIndex remap,
+// not a retarget. Returns false (part skipped) on any bone-name mismatch —
+// rendering a part against the wrong indices would warp it silently, which
+// is worse than just not showing it.
+function attachPartToBaseSkeleton(partMesh, baseSkeleton) {
+  const nameToBaseIndex = new Map()
+  baseSkeleton.bones.forEach((bone, i) => nameToBaseIndex.set(bone.name, i))
+
+  const partBones = partMesh.skeleton.bones
+  const remapped = new Uint16Array(partBones.length)
+  for (let i = 0; i < partBones.length; i++) {
+    const baseIndex = nameToBaseIndex.get(partBones[i].name)
+    if (baseIndex === undefined) return false
+    remapped[i] = baseIndex
+  }
+
+  const skinIndex = partMesh.geometry.getAttribute('skinIndex')
+  const arr = skinIndex.array
+  for (let i = 0; i < arr.length; i++) arr[i] = remapped[arr[i]]
+  skinIndex.needsUpdate = true
+
+  partMesh.bind(baseSkeleton, partMesh.bindMatrix)
+  return true
+}
+
+function applySkinTexture(root, texture) {
+  texture.flipY = false
+  root.traverse((o) => {
+    if (!o.isMesh) return
+    o.material = new MeshStandardMaterial({ map: texture, ...MATERIAL_PBR.PLAYER })
+  })
+}
+
+// Loads one hat/back accessory and clips it to the first bone matching
+// `boneNamePattern` (best-effort — the SDK's exact hat/back attachment bone
+// isn't documented, so this matches on a plausible name rather than a
+// confirmed one). Silently no-ops if no matching bone exists.
+async function attachAccessory(skeleton, boneNamePattern, objUrl, textureUrl) {
+  if (!objUrl) return
+  const bone = findBone(skeleton, boneNamePattern)
+  if (!bone) return
+  try {
+    const obj = await loadObj(objUrl)
+    let texture = null
+    if (textureUrl) {
+      try {
+        texture = await loadTexture(textureUrl)
+      } catch {
+        // Untextured accessory still reads better than skipping it outright.
+      }
+    }
+    obj.traverse((o) => {
+      if (!o.isMesh) return
+      o.material = texture
+        ? new MeshStandardMaterial({ map: texture, ...MATERIAL_PBR.PLAYER })
+        : new MeshStandardMaterial({ color: '#cccccc', ...MATERIAL_PBR.PLAYER })
+    })
+    bone.add(obj)
+  } catch (err) {
+    console.warn('[avatarLoader] accessory failed to load', objUrl, err)
+  }
+}
+
+// `equipped` is the shape SDK.avatar.getEquipped() returns: hatId, backId,
+// skinId, headId, armLId, armRId, legLId, legRId, torsoId. `signal` (optional
+// AbortSignal) lets a caller cancel a stale load (e.g. the player logged out
+// or changed avatars again) without racing a slower-to-resolve part onto the
+// scene after the fact.
+export async function assembleAvatar(equipped, { signal } = {}) {
+  if (!equipped) return null
+
+  let baseGltf
+  try {
+    baseGltf = await loadGltf(baseRigUrl())
+  } catch (err) {
+    console.warn('[avatarLoader] base rig failed to load', err)
+    return null
+  }
+  if (signal?.aborted) return null
+
+  const root = baseGltf.scene
+  const skeleton = findSkeleton(root)
+
+  if (skeleton) {
+    const slots = [
+      ['head', equipped.headId],
+      ['torso', equipped.torsoId],
+      ['armL', equipped.armLId],
+      ['armR', equipped.armRId],
+      ['legL', equipped.legLId],
+      ['legR', equipped.legRId],
+    ]
+    await Promise.all(
+      slots.map(async ([slot, id]) => {
+        const url = partUrl(slot, id)
+        if (!url) return
+        try {
+          const gltf = await loadGltf(url)
+          if (signal?.aborted) return
+          gltf.scene.traverse((o) => {
+            if (o.isSkinnedMesh && attachPartToBaseSkeleton(o, skeleton)) root.add(o)
+          })
+        } catch (err) {
+          console.warn(`[avatarLoader] part "${slot}" failed to load`, url, err)
+        }
+      }),
+    )
+  }
+  if (signal?.aborted) return null
+
+  if (isEquipped(equipped.skinId)) {
+    try {
+      const texture = await loadTexture(skinUrl(equipped.skinId))
+      if (signal?.aborted) return null
+      applySkinTexture(root, texture)
+    } catch (err) {
+      console.warn('[avatarLoader] skin texture failed to load', err)
+    }
+  }
+
+  if (skeleton) {
+    await attachAccessory(skeleton, /head/i, hatObjUrl(equipped.hatId), hatTextureUrl(equipped.hatId))
+    if (signal?.aborted) return null
+    await attachAccessory(skeleton, /spine|chest|back/i, backObjUrl(equipped.backId), backTextureUrl(equipped.backId))
+    if (signal?.aborted) return null
+  }
+
+  return root
+}

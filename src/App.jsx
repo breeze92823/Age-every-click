@@ -2,7 +2,8 @@ import { Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { ACESFilmicToneMapping, PCFSoftShadowMap, SRGBColorSpace } from 'three'
 import GameLoop from './components/GameLoop.jsx'
-import Ground from './components/Ground.jsx'
+import Water from './components/Water.jsx'
+import Island from './components/Island.jsx'
 import Player from './components/Player.jsx'
 import Hud from './components/hud/Hud.jsx'
 
@@ -40,7 +41,8 @@ export default function App() {
 
         <GameLoop />
         <Suspense fallback={null}>
-          <Ground />
+          <Water />
+          <Island />
         </Suspense>
         <Player />
       </Canvas>
