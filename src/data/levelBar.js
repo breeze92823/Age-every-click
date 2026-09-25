@@ -11,6 +11,10 @@
 
 export const LEVEL_BAR_POLL_MS = 100
 
+// Overall size of the main top-of-screen bar (LevelBar.jsx only — applied
+// as a CSS transform: scale, not shared with RebirthLevelBar.jsx).
+export const LEVEL_BAR_SCALE = 0.75
+
 export const LEVEL_BAR_WIDTH = 704
 export const LEVEL_BAR_HEIGHT = 80
 export const LEVEL_BAR_MAX_VW = 70.4
@@ -26,6 +30,10 @@ export const LEVEL_BAR_ICON_OVERHANG = 0.44
 export const LEVEL_BAR_TOP = 16
 
 export const LEVEL_BAR_TRANSITION_MS = 200
+
+// Duration of the "pop" scale animation played on the Age and
+// clicks-remaining readouts whenever their number changes.
+export const LEVEL_BAR_POP_MS = 260
 
 // RebirthLevelBar.jsx's track fill — unrelated to the main bar's own colour
 // below, kept separate so restyling one never touches the other.

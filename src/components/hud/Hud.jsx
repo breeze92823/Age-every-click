@@ -255,23 +255,50 @@ function ToolbarButton({ icon, label, onClick, isTouch }) {
   )
 }
 
+// Duration of the "pop" scale animation played on the coin icon/count
+// whenever the coin total goes up.
+const COIN_POP_MS = 260
+
 // Right-edge, vertically centred: the coins count pill on its own.
 function RightCenterCoins() {
   const coins = useGameStore((s) => s.coins)
   const isTouch = useTouchMode()
 
+  const iconRef = useRef(null)
+  const numberRef = useRef(null)
+  const prevCoinsRef = useRef(coins)
+
+  useEffect(() => {
+    if (prevCoinsRef.current !== null && coins !== prevCoinsRef.current) {
+      for (const el of [iconRef.current, numberRef.current]) {
+        if (!el) continue
+        el.style.animation = 'none'
+        // eslint-disable-next-line no-unused-expressions
+        el.offsetHeight // force reflow so the animation restarts
+        el.style.animation = `coin-pop ${COIN_POP_MS}ms ease-out`
+      }
+    }
+    prevCoinsRef.current = coins
+  }, [coins])
+
   const coinsPill = (
     <div className={`flex items-center gap-1 text-slate-100 ${isTouch ? 'px-2 py-1.5' : 'gap-2 px-3 py-2'}`}>
       <span
+        ref={iconRef}
         aria-hidden="true"
         className={isTouch ? 'text-[2.5rem] leading-none' : 'text-[3.75rem] leading-none'}
-        style={{ filter: 'brightness(1.35) saturate(1.3) drop-shadow(0 0 6px rgba(255,210,30,0.6))' }}
+        style={{
+          display: 'inline-block',
+          filter: 'brightness(1.35) saturate(1.3) drop-shadow(0 0 6px rgba(255,210,30,0.6))',
+        }}
       >
         🪙
       </span>
       <span
+        ref={numberRef}
         className="font-bold tabular-nums"
         style={{
+          display: 'inline-block',
           fontSize: isTouch ? '1.7rem' : '2.25rem',
           lineHeight: 1,
           color: '#ffd21e',
@@ -282,6 +309,14 @@ function RightCenterCoins() {
       >
         {formatCompact(coins)}
       </span>
+
+      <style>{`
+        @keyframes coin-pop {
+          0% { transform: scale(1); }
+          40% { transform: scale(1.28); }
+          100% { transform: scale(1); }
+        }
+      `}</style>
     </div>
   )
 
