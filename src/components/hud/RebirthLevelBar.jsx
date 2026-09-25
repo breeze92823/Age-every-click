@@ -7,10 +7,7 @@ import {
   LEVEL_BAR_BORDER,
   LEVEL_BAR_TEXT_STROKE,
   LEVEL_BAR_LABEL_FONT_PX,
-  LEVEL_BAR_ICON_SIZE,
-  LEVEL_BAR_ICON_OVERHANG,
   LEVEL_BAR_FILL_GRADIENT,
-  LEVEL_BAR_ICON_URL,
   REBIRTH_LEVEL_BAR_TOUCH_SCALE,
 } from '../../data/levelBar.js'
 
@@ -33,7 +30,6 @@ export default function RebirthLevelBar({ compact = false }) {
   const scale = compact ? REBIRTH_LEVEL_BAR_TOUCH_SCALE : 1
   const height = LEVEL_BAR_HEIGHT * scale
   const border = LEVEL_BAR_BORDER * scale
-  const iconSize = LEVEL_BAR_ICON_SIZE * scale
   const labelFont = `800 ${LEVEL_BAR_LABEL_FONT_PX * scale}px/1 ui-rounded, 'Nunito', system-ui, -apple-system, sans-serif`
 
   return (
@@ -70,7 +66,7 @@ export default function RebirthLevelBar({ compact = false }) {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: `0 ${Math.round(28 * scale)}px 0 ${Math.round(iconSize * 0.5)}px`,
+              padding: `0 ${Math.round(28 * scale)}px`,
             }}
           >
             <span style={{ font: labelFont, color: '#fff', textShadow: TEXT_OUTLINE }}>
@@ -78,21 +74,6 @@ export default function RebirthLevelBar({ compact = false }) {
             </span>
           </div>
         </div>
-
-        <img
-          src={LEVEL_BAR_ICON_URL}
-          alt=""
-          draggable={false}
-          style={{
-            position: 'absolute',
-            left: -iconSize * LEVEL_BAR_ICON_OVERHANG,
-            top: '50%',
-            width: iconSize,
-            height: iconSize,
-            transform: 'translateY(-50%)',
-            filter: 'drop-shadow(0 4px 5px rgba(0,0,0,0.4))',
-          }}
-        />
       </div>
     </div>
   )

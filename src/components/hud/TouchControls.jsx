@@ -60,6 +60,7 @@ function LookZone() {
       onPointerUp={onUp}
       onPointerCancel={onUp}
       onContextMenu={(e) => e.preventDefault()}
+      data-click-gain
       className="pointer-events-auto fixed right-0 top-0 bottom-0"
       style={{ left: '46%', touchAction: 'none' }}
     />

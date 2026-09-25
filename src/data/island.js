@@ -32,17 +32,18 @@ export const SPAWN_PAD = { x: SPAWN.x / ISLAND_SCALE, z: SPAWN.z / ISLAND_SCALE 
 
 // One tier per machine, left to right — name/rate/dome color match the
 // reference art. Molten also glows a little to read as lava rather than
-// flat black.
+// flat black. `ageRate` is `rate`'s number (Age gained per second while
+// riding the machine — see useGameStore's tickAgeMachine); `rate` stays the
+// display string so the two can't drift, but is kept as-authored since
+// canvasTextures.js already renders it verbatim.
 const AGE_MACHINE_TIERS = [
-  { name: 'Basic', rate: '+1 Age/s', color: '#eef1f6', price: 100 },
-  { name: 'Double', rate: '+2 Age/s', color: '#9096a1', price: 2000 },
-  { name: 'Gold', rate: '+3 Age/s', color: '#ffcb3d', price: 3500 },
-  // No coins price — locked behind a different currency that isn't wired up
-  // yet, so the buy banner shows priceLabel instead of a coin amount.
-  { name: 'VIP', rate: '+4 Age/s', color: '#ff5b7f', priceLabel: 'Cannot buy with coin' },
-  { name: 'Diamond', rate: '+5 Age/s', color: '#5fc9ff', price: 6500 },
-  { name: 'Emerald', rate: '+6 Age/s', color: '#3ddb6a', price: 8000 },
-  { name: 'Molten', rate: '+7 Age/s', color: '#231710', emissive: '#ff5a1f', emissiveIntensity: 0.6, price: 9500 },
+  { name: 'Basic', rate: '+1 Age/s', ageRate: 1, color: '#eef1f6', price: 100 },
+  { name: 'Double', rate: '+2 Age/s', ageRate: 2, color: '#9096a1', price: 2000 },
+  { name: 'Gold', rate: '+3 Age/s', ageRate: 3, color: '#ffcb3d', price: 3500 },
+  { name: 'VIP', rate: '+4 Age/s', ageRate: 4, color: '#ff5b7f', price: 5000 },
+  { name: 'Diamond', rate: '+5 Age/s', ageRate: 5, color: '#5fc9ff', price: 6500 },
+  { name: 'Emerald', rate: '+6 Age/s', ageRate: 6, color: '#3ddb6a', price: 8000 },
+  { name: 'Molten', rate: '+7 Age/s', ageRate: 7, color: '#231710', emissive: '#ff5a1f', emissiveIntensity: 0.6, price: 9500 },
 ]
 
 export const AGE_MACHINES = {

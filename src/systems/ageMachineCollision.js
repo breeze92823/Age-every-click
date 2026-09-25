@@ -7,7 +7,10 @@ import { ISLAND_SCALE } from '../data/world.js'
 // terrainHeight.js's AGE_MACHINES_TOP_Y handles the vertical step onto the
 // shared stand; this handles horizontal blocking around each machine.
 // Radius matches the base cylinder's widest (bottom) radius, local units.
-const AGE_MACHINE_RADIUS = 0.9
+// Exported so Hud.jsx's Return button can place the player just outside
+// this radius when they leave a machine, instead of relying on next frame's
+// push-out (which no-ops right at the center — see the distSq guard below).
+export const AGE_MACHINE_RADIUS = 0.9
 const mid = (AGE_MACHINES.colors.length - 1) / 2
 const AGE_MACHINE_CENTERS = AGE_MACHINES.colors.map((_, i) => ({
   x: (i - mid) * AGE_MACHINES.spacing,

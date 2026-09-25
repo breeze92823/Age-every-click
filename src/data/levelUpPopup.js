@@ -3,9 +3,9 @@
 // banner pops in at the top-centre of the screen, holds, then floats up and
 // fades.
 export const LEVEL_UP_POPUP_TITLE = 'LEVEL UP!'
-export const LEVEL_UP_POPUP_SUBLABEL = (level) => `Level ${level}`
+export const LEVEL_UP_POPUP_SUBLABEL = (age) => `Age ${age}`
 
-export const LEVEL_UP_POPUP_TOP = 116
+export const LEVEL_UP_POPUP_TOP = 200
 
 export const LEVEL_UP_POPUP_IN_MS = 420
 export const LEVEL_UP_POPUP_HOLD_MS = 900

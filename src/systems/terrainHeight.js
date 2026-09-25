@@ -18,7 +18,9 @@ const BED_TOP_Y = GROUND_Y + BED_DEPTH * ISLAND_SCALE
 // than pass through, same auto-step treatment as the enclosure curbs.
 const AGE_MACHINES_HALF_W = (AGE_MACHINES.colors.length * AGE_MACHINES.spacing + 1) / 2
 const AGE_MACHINES_HALF_D = AGE_MACHINES.standDepth / 2
-const AGE_MACHINES_TOP_Y = GROUND_Y + AGE_MACHINES.standHeight * ISLAND_SCALE
+// Exported so IslandLandmarks.jsx can teleport the player onto this same
+// stand top when they enter a machine, without re-deriving the math.
+export const AGE_MACHINES_TOP_Y = GROUND_Y + AGE_MACHINES.standHeight * ISLAND_SCALE
 
 export function terrainHeightAt(worldX, worldZ) {
   const lx = worldX / ISLAND_SCALE

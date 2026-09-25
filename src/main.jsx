@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import { install as installInput } from './systems/input.js'
+import { install as installClickGain } from './systems/clickGain.js'
 import { resetPlayer } from './systems/playerState.js'
 import { syncYawToPlayer as syncCameraYaw } from './systems/cameraOrbit.js'
 import { SPAWN } from './data/world.js'
@@ -13,12 +14,12 @@ import { useGameStore } from './store/useGameStore.js'
 resetPlayer(SPAWN)
 syncCameraYaw()
 installInput()
+installClickGain()
 // Installs audio + preloads sfx as part of its own init, then wires the SDK
 // if sdk.bloxity.io loaded — no-ops safely if it didn't.
 initBloxity()
-// Loads any saved Speed/Coins/Rebirth/Aura/Skates progress from localStorage
-// and re-saves on every change — this template's stand-in for Ice-Skate's
-// server-backed save.
+// No-op for now — progress starts from useGameStore's defaults until this
+// is wired up to a real server-backed save (see systems/persistence.js).
 installPersistence()
 
 // Dev-only console access to the progression store, e.g.

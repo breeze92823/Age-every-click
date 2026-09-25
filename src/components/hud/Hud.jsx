@@ -1,12 +1,16 @@
-import { useMemo, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { settings } from '../../systems/settingsState.js'
 import { playButtonClick, playButtonHover } from '../../systems/sfx.js'
 import { useGameStore } from '../../store/useGameStore.js'
 import { canAcceptRebirth, rebirthRequirement } from '../../data/progression.js'
 import { SHOP_ITEMS } from '../../data/shop.js'
-import { makeStudOverlayDataURL } from '../../systems/studTexture.js'
 import { formatCompact } from '../../systems/format.js'
+import { resetPlayer } from '../../systems/playerState.js'
+import { SPAWN, ISLAND_SCALE } from '../../data/world.js'
+import { OBBY, AGE_MACHINES } from '../../data/island.js'
+import { AGE_MACHINE_RADIUS } from '../../systems/ageMachineCollision.js'
+import { AGE_MACHINES_TOP_Y } from '../../systems/terrainHeight.js'
 import TouchControls from './TouchControls.jsx'
 import RotatePrompt from './RotatePrompt.jsx'
 import LevelBar from './LevelBar.jsx'
@@ -78,12 +82,6 @@ function RebirthWindow({ rebirth, canRebirth, onConfirm, onClose, isTouch }) {
   return (
     <HudModal title="Rebirth" onClose={onClose} isTouch={isTouch}>
       <div className={`flex items-center justify-center ${isTouch ? 'gap-2 text-2xl' : 'gap-6 text-[3.625rem]'}`}>
-        <img
-          src="/ui/action_popup.png"
-          alt=""
-          className={isTouch ? 'h-9 w-9' : 'h-[5.5rem] w-[5.5rem]'}
-          draggable={false}
-        />
         <span className="font-bold text-amber-300">X{rebirth}</span>
         <span
           className={`inline-block font-black leading-none text-white ${isTouch ? 'text-2xl' : 'text-[4.5rem]'}`}
@@ -91,12 +89,6 @@ function RebirthWindow({ rebirth, canRebirth, onConfirm, onClose, isTouch }) {
         >
           ▶
         </span>
-        <img
-          src="/ui/action_popup.png"
-          alt=""
-          className={isTouch ? 'h-9 w-9' : 'h-[5.5rem] w-[5.5rem]'}
-          draggable={false}
-        />
         <span className="font-bold text-amber-300">X{rebirth + 1}</span>
       </div>
 
@@ -104,7 +96,7 @@ function RebirthWindow({ rebirth, canRebirth, onConfirm, onClose, isTouch }) {
         className={`text-center font-bold text-red-500 ${isTouch ? 'text-sm' : 'text-[1.625rem]'}`}
         style={{ WebkitTextStroke: isTouch ? '1.5px black' : '3px black', paintOrder: 'stroke fill' }}
       >
-        Rebirth resets your Speed and Level!
+        Rebirth resets your Age and Level!
       </div>
 
       <div className="w-full">
@@ -222,13 +214,7 @@ function ShopWindow({ onClose, isTouch }) {
   )
 }
 
-// Tile size (CSS px) for the toolbar buttons' stud overlay.
-const TOOLBAR_BUTTON_STUD_PITCH = 14
-
-const REBIRTH_BUTTON_GRADIENT = 'linear-gradient(180deg, #FFA4FA 0%, #FF4BC2 100%)'
-const SHOP_BUTTON_GRADIENT = 'linear-gradient(180deg, #ffe9a4 0%, #ff9d00 100%)'
-
-function ToolbarButton({ gradient, studOverlay, icon, label, onClick, isTouch }) {
+function ToolbarButton({ icon, label, onClick, isTouch }) {
   return (
     <button
       type="button"
@@ -238,19 +224,27 @@ function ToolbarButton({ gradient, studOverlay, icon, label, onClick, isTouch })
       }}
       onMouseEnter={playButtonHover}
       title={`Open ${label}`}
-      className={`pointer-events-auto flex flex-col items-center justify-center gap-1 rounded-lg border-2 border-black text-slate-100 shadow-lg transition hover:scale-110 hover:brightness-110 ${
+      className={`pointer-events-auto flex flex-col items-center justify-center gap-1 rounded-lg text-slate-100 transition hover:scale-110 hover:brightness-110 ${
         isTouch ? 'h-12 w-12' : 'h-20 w-20'
       }`}
-      style={{
-        backgroundImage: `${studOverlay}, ${gradient}`,
-        backgroundRepeat: 'repeat, no-repeat',
-        backgroundSize: `${TOOLBAR_BUTTON_STUD_PITCH}px ${TOOLBAR_BUTTON_STUD_PITCH}px, 100% 100%`,
-      }}
     >
-      <span className={isTouch ? 'text-lg leading-none' : 'text-2xl leading-none'}>{icon}</span>
       <span
-        className={isTouch ? 'text-[7px] font-semibold leading-none tracking-wide' : 'text-xs font-semibold tracking-wide'}
-        style={{ WebkitTextStroke: isTouch ? '1px black' : '2px black', paintOrder: 'stroke fill' }}
+        className="leading-none"
+        style={{
+          fontSize: isTouch ? '2.25rem' : '3rem',
+          WebkitTextStroke: '5px black',
+          paintOrder: 'stroke fill',
+        }}
+      >
+        {icon}
+      </span>
+      <span
+        className="font-semibold leading-none tracking-wide"
+        style={{
+          fontSize: isTouch ? '14px' : '1.5rem',
+          WebkitTextStroke: '2px black',
+          paintOrder: 'stroke fill',
+        }}
       >
         {label}
       </span>
@@ -308,7 +302,6 @@ function LeftCenterControls() {
   const acceptRebirth = useGameStore((s) => s.acceptRebirth)
   const [openWindow, setOpenWindow] = useState(null) // null | 'rebirth' | 'shop'
   const isTouch = useTouchMode()
-  const studOverlay = useMemo(() => `url(${makeStudOverlayDataURL(TOOLBAR_BUTTON_STUD_PITCH)})`, [])
 
   const modal = {
     rebirth: (
@@ -328,24 +321,48 @@ function LeftCenterControls() {
 
   const portal = modal && createPortal(modal, document.body)
 
+  const goToObby = () => {
+    useGameStore.getState().setScene('island')
+    resetPlayer({ x: OBBY.x * ISLAND_SCALE, y: SPAWN.y, z: OBBY.signZ * ISLAND_SCALE })
+  }
+
+  const goToSpawn = () => {
+    useGameStore.getState().setScene('island')
+    resetPlayer(SPAWN)
+  }
+
+  const rowClassName = `flex items-center ${isTouch ? 'gap-1.5' : 'flex-wrap justify-center gap-2'}`
+
   const buttons = (
-    <div className={`flex items-center ${isTouch ? 'gap-1.5' : 'flex-wrap justify-center gap-2'}`}>
-      <ToolbarButton
-        gradient={REBIRTH_BUTTON_GRADIENT}
-        studOverlay={studOverlay}
-        icon="⭐"
-        label="Rebirth"
-        onClick={() => setOpenWindow('rebirth')}
-        isTouch={isTouch}
-      />
-      <ToolbarButton
-        gradient={SHOP_BUTTON_GRADIENT}
-        studOverlay={studOverlay}
-        icon="🛒"
-        label="Shop"
-        onClick={() => setOpenWindow('shop')}
-        isTouch={isTouch}
-      />
+    <div className="flex flex-col items-center gap-2">
+      <div className={rowClassName}>
+        <ToolbarButton
+          icon="⭐"
+          label="Rebirth"
+          onClick={() => setOpenWindow('rebirth')}
+          isTouch={isTouch}
+        />
+        <ToolbarButton
+          icon="🛒"
+          label="Shop"
+          onClick={() => setOpenWindow('shop')}
+          isTouch={isTouch}
+        />
+      </div>
+      <div className={rowClassName}>
+        <ToolbarButton
+          icon="🌌"
+          label="Obby"
+          onClick={goToObby}
+          isTouch={isTouch}
+        />
+        <ToolbarButton
+          icon="🚩"
+          label="Spawn"
+          onClick={goToSpawn}
+          isTouch={isTouch}
+        />
+      </div>
     </div>
   )
 
@@ -362,6 +379,50 @@ function LeftCenterControls() {
     <div data-hud="left-center" className="pointer-events-none absolute left-4 top-1/2 flex -translate-y-1/2 flex-col items-center gap-3">
       {buttons}
       {portal}
+    </div>
+  )
+}
+
+// Bottom-center, only while riding an Age Machine (see useGameStore's
+// ridingAgeMachine) — the sole way out once playerMovement.js has frozen
+// the player on the machine's stand.
+// Cleared past AGE_MACHINE_RADIUS so the exit spot sits outside the
+// machine's own collision circle — landing exactly on it (margin 0) would
+// still work since it's non-zero, but this keeps the player from spawning
+// right on the boundary.
+const RETURN_EXIT_MARGIN = 0.5
+
+function ReturnButton() {
+  const riding = useGameStore((s) => s.ridingAgeMachine)
+  const exitAgeMachine = useGameStore((s) => s.exitAgeMachine)
+  const isTouch = useTouchMode()
+
+  if (riding == null) return null
+
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-30 flex justify-center">
+      <button
+        type="button"
+        onClick={() => {
+          playButtonClick()
+          // Places the player just outside the glass, on the machine's +Z
+          // (camera-facing) side — the same side they walked up from to hit
+          // Use — rather than leaving them dead-center, where
+          // resolveAgeMachineCollision's push-out no-ops (distSq ~ 0).
+          const mid = (AGE_MACHINES.tiers.length - 1) / 2
+          const x = (riding - mid) * AGE_MACHINES.spacing
+          const z = AGE_MACHINES.z + AGE_MACHINE_RADIUS + RETURN_EXIT_MARGIN
+          resetPlayer({ x: x * ISLAND_SCALE, y: AGE_MACHINES_TOP_Y, z: z * ISLAND_SCALE })
+          exitAgeMachine()
+        }}
+        onMouseEnter={playButtonHover}
+        className={`pointer-events-auto rounded-full border-2 border-black bg-gradient-to-b from-sky-400 to-blue-600 font-black text-white shadow-[0_4px_0_rgba(0,0,0,0.4)] transition hover:brightness-110 active:brightness-95 ${
+          isTouch ? 'px-6 py-2 text-base' : 'px-10 py-3 text-xl'
+        }`}
+        style={{ WebkitTextStroke: isTouch ? '1px black' : '1.5px black', paintOrder: 'stroke fill' }}
+      >
+        Return
+      </button>
     </div>
   )
 }
@@ -402,7 +463,7 @@ export default function Hud() {
          Ice-Skate's held-E actions could), kept wired for parity. */}
       <ActionResult />
 
-      {/* Bottom-centre level progress bar. DOM sibling of the canvas. */}
+      {/* Top-centre level progress bar. DOM sibling of the canvas. */}
       <LevelBar />
 
       {/* Top-centre "LEVEL UP!" banner. */}
@@ -418,6 +479,10 @@ export default function Hud() {
       {/* Per-walk-tick "+N" speed badges around the player. Owns its own
          rAF loop and never re-renders. */}
       <ActionPopups />
+
+      {/* Bottom-center "Return" button — only visible while riding an Age
+         Machine, the sole way out of its movement freeze. */}
+      <ReturnButton />
 
       {/* Full-screen "rotate to landscape" gate for touch sessions. Last
          child + highest z-index so it covers the touch controls while up. */}

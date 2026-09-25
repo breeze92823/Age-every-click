@@ -48,6 +48,19 @@ function approach2D(v, targetX, targetZ, maxDelta) {
 export function step(dt) {
   if (dt <= 0) return
 
+  // Riding an Age Machine (see useGameStore's ridingAgeMachine): the player
+  // is parked on the machine's stand and takes no input at all until the
+  // Return button clears it, so skip input/gravity/collision entirely
+  // rather than letting resolveAgeMachineCollision immediately push them
+  // back out of the pedestal they were just teleported into.
+  if (useGameStore.getState().ridingAgeMachine != null) {
+    player.velocity.x = 0
+    player.velocity.y = 0
+    player.velocity.z = 0
+    player.grounded = true
+    return
+  }
+
   // Which environment is mounted right now — the island's obstacles/terrain
   // steps only apply while standing in it; the Bonus Scene's glass bridge
   // has its own ground lookup in bonusBridge.js.

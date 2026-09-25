@@ -35,7 +35,8 @@ function easeInOutCubic(p) {
 // One DOM node per pool slot in systems/actionPopups.js, created once and
 // recycled — never mounted/unmounted per popup. A self-owned rAF loop reads
 // the pool and writes transform/opacity straight onto the nodes. Ported
-// verbatim from Ice-Skate's components/hud/ActionPopups.jsx.
+// verbatim from Ice-Skate's components/hud/ActionPopups.jsx, except it
+// travels up toward the top-of-screen "Age: N" heading instead of down.
 export default function ActionPopups() {
   const nodesRef = useRef([])
 

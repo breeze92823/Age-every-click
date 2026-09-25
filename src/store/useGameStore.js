@@ -11,7 +11,7 @@ import {
   COINS_MIN,
   COINS_MAX,
   SPEED_PER_GAIN_INITIAL,
-  levelForSpeed,
+  levelForAge,
   canAcceptRebirth,
   clamp,
 } from '../data/progression.js'
@@ -31,7 +31,7 @@ import { AGE_MACHINES } from '../data/island.js'
 // Called at the end of any action that changes speed, so level never has to
 // be restated by hand at more than one call site.
 function derive(state) {
-  return { ...state, level: levelForSpeed(state.speed) }
+  return { ...state, level: levelForAge(state.speed) }
 }
 
 export const useGameStore = create((set, get) => ({
@@ -54,10 +54,18 @@ export const useGameStore = create((set, get) => ({
   ownedAuras: new Set(),
   equippedAura: null,
   // Indices into data/island.js's AGE_MACHINES.tiers that the player has
-  // bought. Buying an Age Machine has no other effect yet (see
-  // components/hud/Hud.jsx's note that coins/speed have no earn action in
-  // this template) — this is ownership only, not a production tick.
+  // bought.
   ownedAgeMachines: new Set(),
+
+  // Index of the Age Machine the player is currently riding, or null.
+  // Transient like currentScene — never persisted, never included in
+  // resetProgress — so a reload or a rebirth never leaves the player stuck
+  // "inside" a machine. Set by IslandLandmarks.jsx's BuyButton (which also
+  // teleports the player onto the machine's stand); cleared by the Return
+  // button in Hud.jsx. While set, playerMovement.js freezes all movement and
+  // clickGain.js ignores clicks, and GameLoop.jsx's per-frame tickAgeMachine
+  // call adds that tier's Age/s to speed.
+  ridingAgeMachine: null,
 
   // Called from scenePortals.js's per-frame trigger check.
   setScene(scene) {
@@ -162,6 +170,35 @@ export const useGameStore = create((set, get) => ({
     if (!tier || tier.price == null || state.coins < tier.price) return false
     set((s) => ({ coins: s.coins - tier.price, ownedAgeMachines: new Set(s.ownedAgeMachines).add(index) }))
     return true
+  },
+
+  // Called from IslandLandmarks.jsx's BuyButton once a machine is owned.
+  // Re-checks ownership itself, same guard pattern as buyAgeMachine — the
+  // caller then teleports the player onto the machine's stand only if this
+  // returns true.
+  enterAgeMachine(index) {
+    const state = get()
+    if (!state.ownedAgeMachines.has(index)) return false
+    set({ ridingAgeMachine: index })
+    return true
+  },
+
+  // Called from the Return button (Hud.jsx), the only way out once riding.
+  exitAgeMachine() {
+    set({ ridingAgeMachine: null })
+  },
+
+  // Called from GameLoop.jsx every frame with the frame's dt. No-ops unless
+  // the player is riding. Adds that tier's Age/s straight to speed —
+  // deliberately flat, not run through gainSpeed's rebirth/aura multipliers,
+  // since a machine's rate is the number painted on its own TierLabel, not a
+  // click.
+  tickAgeMachine(dt) {
+    const state = get()
+    if (state.ridingAgeMachine == null) return
+    const tier = AGE_MACHINES.tiers[state.ridingAgeMachine]
+    if (!tier || !(tier.ageRate > 0)) return
+    set((s) => derive({ ...s, speed: clamp(s.speed + tier.ageRate * dt, SPEED_MIN, SPEED_MAX) }))
   },
 
   // Called from components/hud/Hud.jsx's ShopItemCard "Buy with Coins"

@@ -1,7 +1,9 @@
 import { useEffect, useMemo } from 'react'
 import { DoubleSide } from 'three'
 import { MATERIAL_PBR } from '../data/materials.js'
-import { GROUND_Y } from '../data/world.js'
+import { GROUND_Y, ISLAND_SCALE } from '../data/world.js'
+import { AGE_MACHINES_TOP_Y } from '../systems/terrainHeight.js'
+import { resetPlayer } from '../systems/playerState.js'
 import {
   AGE_MACHINES,
   FREE_BOOTH,
@@ -109,12 +111,12 @@ function OwnedTag({ position }) {
 // plane's default normal already points +Z, so no rotation is needed.
 // Meshes raycast like sprites do, so this still takes r3f's onClick directly.
 //
-// Once owned, a click just plays the confirmation sound — there's no
-// equip/production effect yet (see useGameStore's buyAgeMachine comment), so
-// "Use" mirrors "Buy"'s pre-earn-loop pattern of always giving audible
-// feedback rather than being a silent no-op.
+// Once owned, "Use" teleports the player onto the machine's stand and locks
+// them there (see useGameStore's enterAgeMachine/ridingAgeMachine and
+// playerMovement.js's freeze) until they tap the Return button.
 function BuyButton({ index, owned, position }) {
   const buyAgeMachine = useGameStore((s) => s.buyAgeMachine)
+  const enterAgeMachine = useGameStore((s) => s.enterAgeMachine)
   const label = owned ? 'Use' : 'Buy'
   const { texture, aspect } = useMemo(() => makeBuyButtonTexture({ label }), [label])
   useEffect(() => () => texture.dispose(), [texture])
@@ -125,7 +127,12 @@ function BuyButton({ index, owned, position }) {
       onClick={(e) => {
         e.stopPropagation()
         if (owned) {
-          playButtonClick()
+          if (enterAgeMachine(index)) {
+            playButtonClick()
+            resetPlayer({ x: position[0] * ISLAND_SCALE, y: AGE_MACHINES_TOP_Y + 1, z: AGE_MACHINES.z * ISLAND_SCALE })
+          } else {
+            playActionFail()
+          }
         } else if (buyAgeMachine(index)) {
           playButtonClick()
         } else {

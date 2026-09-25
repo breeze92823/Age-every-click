@@ -1,7 +1,8 @@
 // Speed-gain popup tunables, ported verbatim from Ice-Skate's
 // data/actionPopups.js. Every gain tick (here: every click) spawns one of
 // these — the public/ui/action_popup.png badge with a "+N" readout — near
-// the player. Simulated by systems/actionPopups.js, drawn by
+// the player, then flies up toward the "Age: N" heading at the top of the
+// screen. Simulated by systems/actionPopups.js, drawn by
 // components/hud/ActionPopups.jsx as DOM siblings of the canvas.
 
 export const ACTION_POPUP_POOL_SIZE = 14
@@ -22,10 +23,11 @@ export const ACTION_POPUP_ANCHOR_HEIGHT = 1.3
 export const ACTION_POPUP_SPREAD_X = 0.16
 export const ACTION_POPUP_SPREAD_Y = 0.12
 
-export const ACTION_POPUP_TARGET_Y = -0.95
+// Positive: travels up toward the top-of-screen "Age: N" heading, not down.
+export const ACTION_POPUP_TARGET_Y = 0.95
 export const ACTION_POPUP_CENTER_PULL = 0.7
 
-export const ACTION_POPUP_IMAGE_SIZE = 120
+export const ACTION_POPUP_IMAGE_SIZE = 60
 export const ACTION_POPUP_FONT_SIZE = 40
 
 export const ACTION_POPUP_IMAGE_URL = '/ui/action_popup.png'
