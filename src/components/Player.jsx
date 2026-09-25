@@ -4,8 +4,7 @@ import { Quaternion, Vector3 } from 'three'
 import { player } from '../systems/playerState.js'
 import { authState, getEquippedAvatar, getProportions, onAvatarChanged, onProportionsChanged } from '../systems/bloxity.js'
 import { DEV_MODE } from '../data/bloxity.js'
-import { isEquipped } from '../data/avatarCdn.js'
-import { applyProportions, assembleAvatar } from '../systems/avatarLoader.js'
+import { applyProportions, attachEquippedAccessories } from '../systems/avatarLoader.js'
 import { buildDefaultCharacter, outfitForLevel } from '../systems/defaultCharacter.js'
 import { useGameStore } from '../store/useGameStore.js'
 import { makeGait, updateGait, disposeGait } from '../systems/avatarAnim.js'
@@ -16,39 +15,40 @@ const _up = new Vector3(0, 1, 0)
 const _targetQuat = new Quaternion()
 const TURN_RATE = 0.001 // base of 1 - TURN_RATE^delta; smaller = snappier turn
 
-// The game's own default character (systems/defaultCharacter.js) shows for
-// guests, for signed-in players with nothing equipped, in DEV_MODE, and
-// whenever the CDN avatar fails to load. Only a signed-in player who has
-// actually equipped something gets their Bloxity avatar assembled from the
-// CDN. Reloads whenever the player edits their avatar in the customizer.
+// The player is always the game's own character (systems/defaultCharacter.js),
+// dressed by Age level — never the Bloxity avatar. A signed-in player's
+// equipped Bloxity hat and back item are attached to it as accessories.
+// Rebuilds whenever the outfit changes or the player edits their avatar in
+// the customizer.
 function useBloxityAvatar(outfit) {
   useAuth()
   const [avatar, setAvatar] = useState(() => buildDefaultCharacter(outfit))
   const signedIn = !!authState.user
   const outfitRef = useRef(outfit)
   outfitRef.current = outfit
-  const customRef = useRef(false)
+  const currentRef = useRef(null)
+  const firstRun = useRef(true)
 
   useEffect(() => {
     let cancelled = false
     const controller = new AbortController()
-    let current = null
 
     async function load() {
+      const group = buildDefaultCharacter(outfitRef.current)
       const equipped = signedIn && !DEV_MODE ? getEquippedAvatar() : null
-      const custom = !!equipped && Object.values(equipped).some(isEquipped)
-      customRef.current = custom
-      const group = (custom && (await assembleAvatar(equipped, { signal: controller.signal }))) || buildDefaultCharacter(outfitRef.current)
+      await attachEquippedAccessories(group, equipped, { signal: controller.signal })
       if (cancelled) return
-      current = group
-      applyProportions(current, getProportions())
+      currentRef.current = group
+      applyProportions(group, getProportions())
       setAvatar(group)
     }
-    load()
+    // The initial state already holds the bare character for this outfit.
+    if (firstRun.current && !signedIn) firstRun.current = false
+    else load()
 
     const offAvatar = onAvatarChanged(() => load())
     const offProportions = onProportionsChanged(() => {
-      if (current) applyProportions(current, getProportions())
+      if (currentRef.current) applyProportions(currentRef.current, getProportions())
     })
 
     return () => {
@@ -57,20 +57,7 @@ function useBloxityAvatar(outfit) {
       offAvatar()
       offProportions()
     }
-  }, [signedIn])
-
-  // The Age-level outfit only dresses the game's own default character — a
-  // signed-in player's equipped Bloxity avatar always wins. The first run is
-  // skipped: the initial load above already used the current outfit.
-  const outfitApplied = useRef(outfit)
-  useEffect(() => {
-    if (outfitApplied.current === outfit) return
-    outfitApplied.current = outfit
-    if (customRef.current) return
-    const group = buildDefaultCharacter(outfit)
-    applyProportions(group, getProportions())
-    setAvatar(group)
-  }, [outfit])
+  }, [signedIn, outfit])
 
   return avatar
 }
