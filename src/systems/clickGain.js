@@ -8,8 +8,12 @@ import { spawnActionPopup } from './actionPopups.js'
 // than DRAG_PX is a camera drag, not a click.
 
 const DRAG_PX = 10
+// Spam-clicking is throttled to one gain per this window, no matter how many
+// clicks/taps land inside it.
+const GAIN_INTERVAL_MS = 1000
 const presses = new Map()
 let installed = false
+let lastGainAt = -Infinity
 
 function isClickSurface(el) {
   return el?.tagName === 'CANVAS' || el?.dataset?.clickGain !== undefined
@@ -29,6 +33,9 @@ function onPointerUp(e) {
   // Riding an Age Machine locks out every action, not just movement — see
   // useGameStore's ridingAgeMachine.
   if (useGameStore.getState().ridingAgeMachine != null) return
+  const now = performance.now()
+  if (now - lastGainAt < GAIN_INTERVAL_MS) return
+  lastGainAt = now
   spawnActionPopup(useGameStore.getState().gainSpeed())
 }
 
