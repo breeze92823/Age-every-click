@@ -8,6 +8,7 @@ import { conveyorPushAt } from './conveyor.js'
 import { resolveAgeMachineCollision } from './ageMachineCollision.js'
 import { resolveLandmarkCollision } from './landmarkCollision.js'
 import { checkScenePortal } from './scenePortals.js'
+import { checkStatueInteract, syncStatueInteractHeld } from './statueInteract.js'
 import { bonusGroundAt, stepBonusBridge, resetBonusBridge } from './bonusBridge.js'
 import { studJumpsGroundAt, resolveStudJumpsWalls, stepStudJumps } from './studJumps.js'
 import { tsunamiGroundAt, resolveTsunamiWalls, stepTsunami, resetTsunami } from './tsunamiScene.js'
@@ -57,7 +58,11 @@ export function step(dt) {
   // Return button clears it, so skip input/gravity/collision entirely
   // rather than letting resolveAgeMachineCollision immediately push them
   // back out of the pedestal they were just teleported into.
-  if (useGameStore.getState().ridingAgeMachine != null) {
+  // The Lucky Wheel popup (opened with E at the Statue) freezes the player
+  // the same way.
+  const { ridingAgeMachine, wheelOpen } = useGameStore.getState()
+  if (ridingAgeMachine != null || wheelOpen) {
+    syncStatueInteractHeld(inputState.interactHeld)
     player.velocity.x = 0
     player.velocity.y = 0
     player.velocity.z = 0
@@ -65,13 +70,6 @@ export function step(dt) {
     setInteractPrompt(null)
     return
   }
-
-  // Edge-triggered E keydown, consumed once per frame by checkScenePortal
-  // below — entering the Impossible Bridge/Stud Jumps/Tsunami Escape obby
-  // scenes from the island needs a press, same "press E" mechanism as
-  // Ice-Skate's proximity pads, minus its 2s hold gate.
-  const interactPressed = inputState.interact
-  inputState.interact = false
 
   // Which environment is mounted right now — the island's obstacles/terrain
   // steps only apply while standing in it; the Bonus Scene's glass bridge
@@ -192,11 +190,13 @@ export function step(dt) {
   if (onStudJumps && stepStudJumps()) return
   if (onTsunami && stepTsunami(dt)) return
 
-  // Pressing E on the Impossible Bridge, Stud Jumps or Tsunami Escape pad
+  // Holding E on the Impossible Bridge, Stud Jumps or Tsunami Escape pad
   // (or standing on the exit pad in whichever scene that led to, which
   // stays collide-triggered) swaps which environment is mounted and
   // re-spawns the player there — see scenePortals.js.
-  const portal = checkScenePortal(p.x, p.z, currentScene, interactPressed)
+  const portal = checkScenePortal(p.x, p.z, currentScene, inputState.interactHeld, dt)
+  if (onIsland) checkStatueInteract(p.x, p.z, inputState.interactHeld)
+  else syncStatueInteractHeld(inputState.interactHeld)
   if (portal) {
     if (portal.scene === 'bonus') resetBonusBridge()
     if (portal.scene === 'tsunami') resetTsunami()

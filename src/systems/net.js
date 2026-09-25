@@ -13,6 +13,7 @@
 // durable progress, and the merged global leaderboard.
 import { authState, subscribeAuth, getStableUserId } from './bloxity.js'
 import { useGameStore } from '../store/useGameStore.js'
+import { claimLocalFreeSpin } from './freeSpin.js'
 import {
   SERVER_URL,
   ROOM_NAME,
@@ -160,6 +161,9 @@ function progressPayload() {
     ownedAuras: Array.from(s.ownedAuras),
     equippedAura: s.equippedAura,
     ownedAgeMachines: Array.from(s.ownedAgeMachines),
+    spins: s.spins,
+    speedCoil: s.speedCoil,
+    wheelSpins: s.wheelSpins,
   }
 }
 
@@ -204,6 +208,9 @@ function onLocalStoreChangeProgress(state) {
     state.ownedHexPads.size,
     state.ownedAuras.size,
     state.ownedAgeMachines.size,
+    state.spins,
+    state.speedCoil,
+    state.wheelSpins,
   ])
   if (snap !== lastScheduledProgress) {
     lastScheduledProgress = snap
@@ -219,6 +226,40 @@ function onLocalStoreChangeProgress(state) {
 // already the source of truth by then, and the next scheduled saveProgress
 // writes it back over Mongo regardless.
 let hydratedFromServer = false
+
+// --- Lucky Wheel free spin --------------------------------------------------
+// The daily free spin's 24h cooldown is checked and stamped by the SERVER for a
+// signed-in player (IslandRoom.ts's claimFreeSpin), so it survives reloads and
+// can't be skipped by changing the device clock. Resolves { ok, nextInMs,
+// reason? } — nextInMs is the cooldown as a duration. A guest, or a server
+// with no Mongo (reason 'unavailable'), falls back to systems/freeSpin.js's
+// local timer; a signed-in player who can't reach the server just gets
+// reason 'offline' rather than a free local claim that would sit outside the
+// server's record.
+let pendingFreeSpin = null
+const FREE_SPIN_REPLY_TIMEOUT_MS = 5000
+
+export async function requestFreeSpin() {
+  if (!getStableUserId()) return claimLocalFreeSpin()
+  if (!room) return { ok: false, reason: 'offline', nextInMs: 0 }
+  if (pendingFreeSpin) return { ok: false, reason: 'busy', nextInMs: 0 }
+
+  let reply
+  try {
+    reply = await withTimeout(
+      new Promise((resolve) => {
+        pendingFreeSpin = resolve
+        room.send('claimFreeSpin', {})
+      }),
+      FREE_SPIN_REPLY_TIMEOUT_MS,
+      'freeSpin timeout',
+    )
+  } catch {
+    pendingFreeSpin = null
+    return { ok: false, reason: 'offline', nextInMs: 0 }
+  }
+  return reply.reason === 'unavailable' ? claimLocalFreeSpin() : reply
+}
 
 // --- Identity sync (login/logout mid-session) ----------------------------
 // join options only carry whatever username/userId was true the instant the
@@ -372,6 +413,13 @@ function attachRoom(joined) {
     if (hydratedFromServer) return
     hydratedFromServer = true
     useGameStore.getState().hydrate(msg)
+  })
+
+  // Reply to requestFreeSpin() below.
+  room.onMessage('freeSpin', (msg) => {
+    const resolve = pendingFreeSpin
+    pendingFreeSpin = null
+    if (resolve) resolve(msg || { ok: false, reason: 'error', nextInMs: 0 })
   })
 
   // The merged all-time + online leaderboard (server IslandRoom.ts's

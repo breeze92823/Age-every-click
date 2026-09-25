@@ -17,9 +17,9 @@ const TREE_TIERS = [
   [1.25, 0.8],
   [0.55, 0.45],
 ]
-const TRUNK = '#7e5230'
-const LEAVES_LIGHT = ['#65b83a', '#5aae33']
-const LEAVES_DARK = ['#398930', '#317b29']
+const TRUNK = '#93643c'
+const LEAVES_LIGHT = ['#9be866', '#8fe05a']
+const LEAVES_DARK = ['#78d15a', '#6cc850']
 const BUSH = ['#78c944', '#6cbd3c']
 const ROCK = ['#989ba4', '#84888f']
 const PETALS = ['#ff4d4d', '#4d8bff', '#ffd23d', '#ffffff', '#ff7ad9']
@@ -105,7 +105,9 @@ export default function IslandDecor() {
       m.setColorAt(i, color.set(b.c))
     })
     m.castShadow = true
-    m.receiveShadow = true
+    // Off so tree tiers don't shade each other into dark patches; they still
+    // cast onto the ground.
+    m.receiveShadow = false
     m.computeBoundingSphere()
     return m
   }, [])

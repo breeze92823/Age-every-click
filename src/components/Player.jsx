@@ -2,64 +2,32 @@ import { useEffect, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Quaternion, Vector3 } from 'three'
 import { player } from '../systems/playerState.js'
-import { MATERIAL_PBR } from '../data/materials.js'
 import { authState, getEquippedAvatar, getProportions, onAvatarChanged, onProportionsChanged } from '../systems/bloxity.js'
 import { DEV_MODE } from '../data/bloxity.js'
+import { isEquipped } from '../data/avatarCdn.js'
 import { applyProportions, assembleAvatar } from '../systems/avatarLoader.js'
+import { buildDefaultCharacter, outfitForLevel } from '../systems/defaultCharacter.js'
+import { useGameStore } from '../store/useGameStore.js'
 import { makeGait, updateGait, disposeGait } from '../systems/avatarAnim.js'
+import { updateHair } from '../systems/hairPhysics.js'
 import { useAuth } from './hud/hooks.js'
 
 const _up = new Vector3(0, 1, 0)
 const _targetQuat = new Quaternion()
 const TURN_RATE = 0.001 // base of 1 - TURN_RATE^delta; smaller = snappier turn
 
-// Sentinel "nothing equipped" ids (see avatarCdn.js's isEquipped) — passing
-// this to assembleAvatar loads just the bare base rig from the CDN, which is
-// the Bloxity default character shown to guests and to signed-in players who
-// haven't equipped anything.
-const DEFAULT_EQUIPPED = {
-  hatId: null,
-  backId: null,
-  skinId: '-1',
-  headId: '-1',
-  armLId: '-1',
-  armRId: '-1',
-  legLId: '-1',
-  legRId: '-1',
-  torsoId: '-1',
-}
-
-// The plain capsule + facing nub — the last-resort fallback for when even
-// the bare Bloxity base rig can't be loaded (SDK unavailable, CDN blocked,
-// offline dev), so the scene is never left with no player mesh at all.
-function DefaultCharacter() {
-  const { radius, height } = player.dims
-  const cylinder = height - radius * 2
-  return (
-    <>
-      <mesh position-y={height / 2} castShadow>
-        <capsuleGeometry args={[radius, cylinder, 4, 12]} />
-        <meshStandardMaterial color="#4fb3ff" {...MATERIAL_PBR.PLAYER} />
-      </mesh>
-      {/* nub marking the facing direction */}
-      <mesh position={[0, height * 0.62, radius]} castShadow>
-        <boxGeometry args={[0.14, 0.14, 0.28]} />
-        <meshStandardMaterial color="#ffd36b" {...MATERIAL_PBR.PLAYER} />
-      </mesh>
-    </>
-  )
-}
-
-// Loads the Bloxity avatar in place of the fallback capsule: the signed-in
-// player's real equipped avatar, or the bare default rig (DEFAULT_EQUIPPED)
-// for a guest. Reloads whenever the player edits their avatar in the
-// customizer. Stays null (capsule keeps showing) before the load finishes or
-// if it fails outright — see systems/avatarLoader.js's own fallback rules
-// for why a partial/failed load still resolves rather than throwing.
-function useBloxityAvatar() {
+// The game's own default character (systems/defaultCharacter.js) shows for
+// guests, for signed-in players with nothing equipped, in DEV_MODE, and
+// whenever the CDN avatar fails to load. Only a signed-in player who has
+// actually equipped something gets their Bloxity avatar assembled from the
+// CDN. Reloads whenever the player edits their avatar in the customizer.
+function useBloxityAvatar(outfit) {
   useAuth()
-  const [avatar, setAvatar] = useState(null)
+  const [avatar, setAvatar] = useState(() => buildDefaultCharacter(outfit))
   const signedIn = !!authState.user
+  const outfitRef = useRef(outfit)
+  outfitRef.current = outfit
+  const customRef = useRef(false)
 
   useEffect(() => {
     let cancelled = false
@@ -67,12 +35,11 @@ function useBloxityAvatar() {
     let current = null
 
     async function load() {
-      // DEV_MODE skips static.bloxity.io entirely (a separate host from the
-      // SDK script) so local dev never waits on it — capsule stays shown.
-      if (DEV_MODE) return
-      const equipped = (signedIn && getEquippedAvatar()) || DEFAULT_EQUIPPED
-      const group = await assembleAvatar(equipped, { signal: controller.signal })
-      if (cancelled || !group) return
+      const equipped = signedIn && !DEV_MODE ? getEquippedAvatar() : null
+      const custom = !!equipped && Object.values(equipped).some(isEquipped)
+      customRef.current = custom
+      const group = (custom && (await assembleAvatar(equipped, { signal: controller.signal }))) || buildDefaultCharacter(outfitRef.current)
+      if (cancelled) return
       current = group
       applyProportions(current, getProportions())
       setAvatar(group)
@@ -92,6 +59,19 @@ function useBloxityAvatar() {
     }
   }, [signedIn])
 
+  // The Age-level outfit only dresses the game's own default character — a
+  // signed-in player's equipped Bloxity avatar always wins. The first run is
+  // skipped: the initial load above already used the current outfit.
+  const outfitApplied = useRef(outfit)
+  useEffect(() => {
+    if (outfitApplied.current === outfit) return
+    outfitApplied.current = outfit
+    if (customRef.current) return
+    const group = buildDefaultCharacter(outfit)
+    applyProportions(group, getProportions())
+    setAvatar(group)
+  }, [outfit])
+
   return avatar
 }
 
@@ -102,7 +82,8 @@ function useBloxityAvatar() {
 // player.facing rather than snapping to it.
 export default function Player() {
   const ref = useRef()
-  const avatar = useBloxityAvatar()
+  const outfit = useGameStore((s) => outfitForLevel(s.level))
+  const avatar = useBloxityAvatar(outfit)
   const gaitRef = useRef(null)
 
   // Rebuilt per loaded avatar — the gait's cached bind-pose quaternions
@@ -117,7 +98,7 @@ export default function Player() {
     }
   }, [avatar])
 
-  useFrame((_state, delta) => {
+  useFrame((state, delta) => {
     const g = ref.current
     if (!g) return
     g.position.set(player.position.x, player.position.y, player.position.z)
@@ -129,7 +110,13 @@ export default function Player() {
       const speed01 = Math.hypot(player.velocity.x, player.velocity.z) / player.moveSpeed
       updateGait(gait, Math.min(delta, 0.1), speed01, player.grounded)
     }
+    // After the gait has posed the head, so the hair follows this frame's pose.
+    updateHair(avatar, delta, state.clock.elapsedTime)
   })
 
-  return <group ref={ref}>{avatar ? <primitive object={avatar} /> : <DefaultCharacter />}</group>
+  return (
+    <group ref={ref}>
+      <primitive object={avatar} />
+    </group>
+  )
 }

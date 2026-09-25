@@ -244,7 +244,7 @@ export function makeLeaderboardTexture(entries, { accent = '#ffd23d', w = 600, h
   canvas.height = h
   const g = canvas.getContext('2d')
 
-  g.fillStyle = '#3d2410'
+  g.fillStyle = '#6a4424'
   g.fillRect(0, 0, w, h)
 
   const padX = w * 0.06

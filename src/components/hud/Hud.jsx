@@ -9,6 +9,7 @@ import { formatCompact } from '../../systems/format.js'
 import { resetPlayer } from '../../systems/playerState.js'
 import { SPAWN, ISLAND_SCALE } from '../../data/world.js'
 import { OBBY, AGE_MACHINES } from '../../data/island.js'
+import { AGE_BOOST_MULTIPLIER } from '../../data/luckyWheel.js'
 import { AGE_MACHINE_RADIUS } from '../../systems/ageMachineCollision.js'
 import { AGE_MACHINES_TOP_Y } from '../../systems/terrainHeight.js'
 import TouchControls from './TouchControls.jsx'
@@ -23,6 +24,7 @@ import ActionResult from './ActionResult.jsx'
 import ActionPopups from './ActionPopups.jsx'
 import BonusTimer from './BonusTimer.jsx'
 import InteractPrompt from './InteractPrompt.jsx'
+import LuckyWheel from './LuckyWheel.jsx'
 import { actionResultState } from '../../systems/actionResult.js'
 import { useSettings, useTouchMode } from './hooks.js'
 
@@ -216,7 +218,26 @@ function ShopWindow({ onClose, isTouch }) {
   )
 }
 
-function ToolbarButton({ icon, label, onClick, isTouch }) {
+// Glossy rounded-tile backgrounds for ToolbarButton's optional `tile` prop:
+// [top, bottom, border] of the fill gradient.
+const TOOLBAR_TILES = {
+  pink: ['#ff6fae', '#d63384', '#7a1245'],
+  green: ['#6fdc6f', '#2ea043', '#124a1e'],
+  purple: ['#a78bfa', '#7c3aed', '#3b1a78'],
+  blue: ['#5ec8ff', '#1f8fe0', '#0d3f73'],
+}
+
+function ToolbarButton({ icon, label, onClick, isTouch, tile }) {
+  const colors = tile ? TOOLBAR_TILES[tile] : null
+  const tileStyle = colors
+    ? {
+        background: `linear-gradient(180deg, ${colors[0]} 0%, ${colors[1]} 100%)`,
+        border: `${isTouch ? 2 : 3}px solid ${colors[2]}`,
+        boxShadow:
+          'inset 0 3px 0 rgba(255,255,255,0.45), inset 0 -4px 0 rgba(0,0,0,0.2), 0 3px 6px rgba(0,0,0,0.4)',
+      }
+    : undefined
+
   return (
     <button
       type="button"
@@ -226,9 +247,10 @@ function ToolbarButton({ icon, label, onClick, isTouch }) {
       }}
       onMouseEnter={playButtonHover}
       title={`Open ${label}`}
-      className={`pointer-events-auto flex flex-col items-center justify-center gap-1 rounded-lg text-slate-100 transition hover:scale-110 hover:brightness-110 ${
-        isTouch ? 'h-12 w-12' : 'h-20 w-20'
-      }`}
+      style={tileStyle}
+      className={`pointer-events-auto flex flex-col items-center justify-center gap-1 text-slate-100 transition hover:scale-110 hover:brightness-110 ${
+        colors ? 'rounded-xl' : 'rounded-lg'
+      } ${isTouch ? (colors ? 'h-16 w-16' : 'h-12 w-12') : colors ? 'h-28 w-28' : 'h-20 w-20'}`}
     >
       <span
         className="leading-none"
@@ -258,6 +280,36 @@ function ToolbarButton({ icon, label, onClick, isTouch }) {
 // Duration of the "pop" scale animation played on the coin icon/count
 // whenever the coin total goes up.
 const COIN_POP_MS = 260
+
+// "x2 Age 0:29" countdown for the Lucky Wheel's Age boost prize — renders
+// nothing once the store's ageBoostUntil has passed.
+function AgeBoostBadge() {
+  const until = useGameStore((s) => s.ageBoostUntil)
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    if (Date.now() >= until) return undefined
+    setNow(Date.now())
+    const id = setInterval(() => setNow(Date.now()), 250)
+    return () => clearInterval(id)
+  }, [until])
+
+  const remaining = Math.ceil((until - now) / 1000)
+  if (remaining <= 0) return null
+  const mm = Math.floor(remaining / 60)
+  const ss = String(remaining % 60).padStart(2, '0')
+  return (
+    <div
+      className="flex items-center gap-1.5 rounded-full border-2 border-black bg-black/60 px-3 py-1 text-base font-black text-lime-300"
+      style={{ WebkitTextStroke: '1px black', paintOrder: 'stroke fill' }}
+    >
+      <span aria-hidden="true">🚀</span>
+      <span>
+        x{AGE_BOOST_MULTIPLIER} Age {mm}:{ss}
+      </span>
+    </div>
+  )
+}
 
 // Right-edge, vertically centred: the coins count pill on its own.
 function RightCenterCoins() {
@@ -324,6 +376,7 @@ function RightCenterCoins() {
     return (
       <div data-hud="right-center" className="pointer-events-none absolute right-4 top-24 flex flex-col items-end gap-2">
         {coinsPill}
+        <AgeBoostBadge />
       </div>
     )
   }
@@ -331,6 +384,7 @@ function RightCenterCoins() {
   return (
     <div data-hud="right-center" className="pointer-events-none absolute right-4 top-1/2 flex -translate-y-1/2 flex-col items-center gap-3">
       {coinsPill}
+      <AgeBoostBadge />
     </div>
   )
 }
@@ -381,12 +435,14 @@ function LeftCenterControls() {
         <ToolbarButton
           icon="⭐"
           label="Rebirth"
+          tile="pink"
           onClick={() => setOpenWindow('rebirth')}
           isTouch={isTouch}
         />
         <ToolbarButton
           icon="🛒"
           label="Shop"
+          tile="green"
           onClick={() => setOpenWindow('shop')}
           isTouch={isTouch}
         />
@@ -395,12 +451,14 @@ function LeftCenterControls() {
         <ToolbarButton
           icon="🌌"
           label="Obby"
+          tile="purple"
           onClick={goToObby}
           isTouch={isTouch}
         />
         <ToolbarButton
           icon="🚩"
           label="Spawn"
+          tile="blue"
           onClick={goToSpawn}
           isTouch={isTouch}
         />
@@ -542,6 +600,10 @@ export default function Hud() {
       {/* Bottom-center "Press E to ..." pill — armed while standing on one
          of the island's obby entry pads (see systems/scenePortals.js). */}
       <InteractPrompt />
+
+      {/* Lucky Wheel popup — opened with E at the Statue (see
+         systems/statueInteract.js). Portals itself to document.body. */}
+      <LuckyWheel />
 
       {/* Full-screen "rotate to landscape" gate for touch sessions. Last
          child + highest z-index so it covers the touch controls while up. */}

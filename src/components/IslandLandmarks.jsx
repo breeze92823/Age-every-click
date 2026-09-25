@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { DoubleSide } from 'three'
+import { DoubleSide, ExtrudeGeometry, MeshStandardMaterial, Path, Shape, ShapeGeometry, SphereGeometry, Vector2 } from 'three'
 import { MATERIAL_PBR } from '../data/materials.js'
 import { GROUND_Y, ISLAND_SCALE } from '../data/world.js'
 import { AGE_MACHINES_TOP_Y } from '../systems/terrainHeight.js'
@@ -12,6 +12,7 @@ import {
   SIGN_BOARD,
   SHOP,
   STATUE,
+  WIN_SIGN,
   SPAWN_PAD,
   PETS,
   OBBY,
@@ -38,14 +39,16 @@ import { showActionResult } from '../systems/actionResult.js'
 
 // The hub's set pieces, laid out per data/island.js. Everything faces +Z,
 // toward the spawn camera. Heights are in metres against the 1.8 m player.
-// Most of these are static obstacles the player collides with — see
-// landmarkCollision.js for the blocking radii and what's deliberately left
-// walkable (SpawnPad, the Obby pads, the Trampoline).
+// Most of these are static obstacles the player collides with, including the
+// Obby entry pads — see landmarkCollision.js for the blocking radii and
+// what's deliberately left walkable (SpawnPad, the Trampoline).
 
 const WOOD = '#9c6232'
 const WOOD_DARK = '#6e4221'
 const STONE = '#a9aeb8'
 const METAL = '#2e3138'
+// Statue's medallion — pie-slice wedge colors, prize-wheel style.
+const WHEEL_COLORS = ['#ff5b7f', '#ffcb3d', '#3ddb6a', '#5fc9ff', '#e04cf0', '#ff8a3d', '#35d0ff', '#f4f0ff']
 // AgeMachine's glass shell radius — shared with AgeMachines so the price/Buy
 // banner can sit flush against its +Z (camera-facing) surface.
 const GLASS_RADIUS = 0.6
@@ -275,7 +278,7 @@ function Shop() {
   const awningWidth = 3.8
   const stripeWidth = awningWidth / stripes
   return (
-    <group position={[SHOP.x, GROUND_Y, SHOP.z]}>
+    <group position={[SHOP.x, GROUND_Y, SHOP.z]} rotation-y={Math.PI}>
       <Box size={[3.4, 2.6, 0.2]} position={[0, 1.3, -0.9]} color="#c98a4b" />
       <Box size={[3.4, 1, 1.2]} position={[0, 0.5, 0.6]} color="#b5703a" />
       <Box size={[3.6, 0.12, 1.4]} position={[0, 1.06, 0.6]} color={WOOD_DARK} />
@@ -305,15 +308,243 @@ function Shop() {
   )
 }
 
+// Statue's original design yaw — the medallion's facing is pinned to this,
+// not to the live STATUE.yaw, so that turning the statue (STATUE.yaw) turns
+// the whole thing, medallion included, instead of the medallion silently
+// undoing the change to keep facing the leaderboards.
+const STATUE_BASE_YAW = -0.5
+
+// Medallion light show: 2-3 wedges glow at once, never side by side, and the
+// lit set reshuffles every WHEEL_LIGHT_PERIOD seconds. Levels ease toward
+// their target so wedges fade like bulbs rather than snapping.
+const WHEEL_LIGHT_PERIOD = 0.6
+const WHEEL_LIGHT_FADE = 12 // per-second ease rate
+const WHEEL_LIT_INTENSITY = 3
+const WHEEL_DIM = 0.7 // unlit wedge brightness, so the lit ones pop
+
+function pickLitWedges(count, previous) {
+  const n = WHEEL_COLORS.length
+  for (let tries = 0; tries < 50; tries++) {
+    const picked = []
+    const order = Array.from({ length: n }, (_, i) => i).sort(() => Math.random() - 0.5)
+    const want = Math.random() < 0.5 ? 2 : 3
+    for (const i of order) {
+      if (picked.length === want) break
+      // Circular distance >= 2 from every already-picked wedge (no neighbours).
+      if (picked.every((j) => Math.min((i - j + n) % n, (j - i + n) % n) >= 2)) picked.push(i)
+    }
+    const changed = !previous || picked.length !== previous.length || picked.some((i) => !previous.includes(i))
+    if (picked.length >= count && changed) return picked
+  }
+  return [0, 3, 6]
+}
+
 function Statue() {
+  const wheelRef = useRef(null)
+  const wedgeMats = useMemo(
+    () =>
+      WHEEL_COLORS.map(
+        (color) => new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0, ...MATERIAL_PBR.PROP }),
+      ),
+    [],
+  )
+  const wedgeLight = useRef({ lit: [], levels: WHEEL_COLORS.map(() => 0), nextAt: 0 })
+  useEffect(() => () => wedgeMats.forEach((m) => m.dispose()), [wedgeMats])
+  useFrame(({ clock }, dt) => {
+    const s = wedgeLight.current
+    const t = clock.elapsedTime
+    if (t >= s.nextAt) {
+      s.lit = pickLitWedges(2, s.lit)
+      s.nextAt = t + WHEEL_LIGHT_PERIOD
+    }
+    const k = 1 - Math.exp(-WHEEL_LIGHT_FADE * dt)
+    wedgeMats.forEach((m, i) => {
+      s.levels[i] += ((s.lit.includes(i) ? 1 : 0) - s.levels[i]) * k
+      const level = s.levels[i]
+      m.emissiveIntensity = level * WHEEL_LIT_INTENSITY
+      m.color.set(WHEEL_COLORS[i]).multiplyScalar(WHEEL_DIM + (1 - WHEEL_DIM) * level)
+    })
+  })
+  const leaderboardYaw = useMemo(() => {
+    const cx = (LEADERBOARDS[0].x + LEADERBOARDS[1].x) / 2
+    const cz = (LEADERBOARDS[0].z + LEADERBOARDS[1].z) / 2
+    return Math.atan2(cx - STATUE.x, cz - STATUE.z) - STATUE_BASE_YAW
+  }, [])
   return (
     <group position={[STATUE.x, GROUND_Y, STATUE.z]} rotation-y={STATUE.yaw}>
-      <Box size={[1.8, 0.6, 1.8]} position={[0, 0.3, 0]} color="#8e939c" />
-      <Box size={[1.2, 0.3, 1.2]} position={[0, 0.75, 0]} color="#9aa0aa" />
-      <mesh position={[0, 2.35, 0]} rotation={[Math.PI / 2 - 0.15, 0, 0]} scale={[1, 1, 1.25]} castShadow>
-        <cylinderGeometry args={[1.25, 1.25, 0.3, 24]} />
-        <Mat color={STONE} />
-      </mesh>
+      <Box size={[1.8, 0.6, 1.8]} position={[0, 0.3, 0]} color="#c4c9d2" emissive="#c4c9d2" emissiveIntensity={0.25} />
+      <Box size={[1.2, 0.5, 1.2]} position={[0, 0.85, 0]} color="#d0d5de" emissive="#d0d5de" emissiveIntensity={0.25} />
+      <group position={[0, 2.35, 0]} rotation-y={leaderboardYaw}>
+        <group ref={wheelRef} rotation-x={Math.PI / 2 - 0.15}>
+          <mesh castShadow>
+            <cylinderGeometry args={[1.25, 1.25, 0.3, 24]} />
+            <Mat color="#d0d5de" emissive="#d0d5de" emissiveIntensity={0.25} />
+          </mesh>
+          {/* Colored decal on the outward (leaderboard-facing) side only — the
+              back face and rim stay plain stone. */}
+          <group position={[0, 0.17, 0]}>
+            {WHEEL_COLORS.map((color, i) => {
+              const thetaLength = (Math.PI * 2) / WHEEL_COLORS.length
+              return (
+                <mesh key={color} rotation-y={i * thetaLength} castShadow material={wedgeMats[i]}>
+                  <cylinderGeometry args={[1.24, 1.24, 0.04, 4, 1, false, 0, thetaLength]} />
+                </mesh>
+              )
+            })}
+          </group>
+        </group>
+      </group>
+    </group>
+  )
+}
+
+// Marquee arrow beside the Statue: a hollow red arrow frame ringed with
+// blinking bulbs, "Win" inside, pointing at the statue (-X) from two chrome
+// poles. Built tip-toward-+X then mirrored so it points the way it should.
+const ARROW_TAIL = -1.6
+const ARROW_HEAD_BASE = 0.8
+const ARROW_TIP = 1.7
+const ARROW_SHAFT_H = 0.3
+const ARROW_HEAD_H = 0.68
+const ARROW_BORDER = 0.08
+const ARROW_DEPTH = 0.16
+const ARROW_BEVEL = 0.02
+const ARROW_TILT = 0.12
+const BULB_SPACING = 0.32
+const BULB_COLOR = '#fff2b0'
+const FRAME_FRONT_Z = ARROW_DEPTH / 2 + ARROW_BEVEL
+
+// Counter-clockwise outline, mirrored so the tip points -X.
+const ARROW_OUTLINE = [
+  [ARROW_TAIL, -ARROW_SHAFT_H],
+  [ARROW_HEAD_BASE, -ARROW_SHAFT_H],
+  [ARROW_HEAD_BASE, -ARROW_HEAD_H],
+  [ARROW_TIP, 0],
+  [ARROW_HEAD_BASE, ARROW_HEAD_H],
+  [ARROW_HEAD_BASE, ARROW_SHAFT_H],
+  [ARROW_TAIL, ARROW_SHAFT_H],
+]
+  .map(([x, y]) => [-x, y])
+  .reverse()
+
+// Mitre-offsets a counter-clockwise polygon inward by d.
+function insetPolygon(pts, d) {
+  const n = pts.length
+  const lines = pts.map(([x0, y0], i) => {
+    const [x1, y1] = pts[(i + 1) % n]
+    const dx = x1 - x0
+    const dy = y1 - y0
+    const len = Math.hypot(dx, dy)
+    return { px: x0 - (dy / len) * d, py: y0 + (dx / len) * d, dx, dy }
+  })
+  return pts.map((_, i) => {
+    const a = lines[(i - 1 + n) % n]
+    const b = lines[i]
+    const t = ((b.px - a.px) * b.dy - (b.py - a.py) * b.dx) / (a.dx * b.dy - a.dy * b.dx)
+    return [a.px + a.dx * t, a.py + a.dy * t]
+  })
+}
+
+// Evenly spaced points around a closed polygon's edges (one per spacing).
+function pointsAlong(pts, spacing) {
+  const out = []
+  pts.forEach(([x0, y0], i) => {
+    const [x1, y1] = pts[(i + 1) % pts.length]
+    const steps = Math.max(1, Math.round(Math.hypot(x1 - x0, y1 - y0) / spacing))
+    for (let s = 0; s < steps; s++) out.push([x0 + ((x1 - x0) * s) / steps, y0 + ((y1 - y0) * s) / steps])
+  })
+  return out
+}
+
+const toVectors = (pts) => pts.map(([x, y]) => new Vector2(x, y))
+
+function WinSign() {
+  const { frameGeo, backingGeo, bulbs } = useMemo(() => {
+    const inner = insetPolygon(ARROW_OUTLINE, ARROW_BORDER)
+    const shape = new Shape(toVectors(ARROW_OUTLINE))
+    shape.holes.push(new Path(toVectors(inner)))
+    const frame = new ExtrudeGeometry(shape, {
+      depth: ARROW_DEPTH,
+      bevelEnabled: true,
+      bevelThickness: ARROW_BEVEL,
+      bevelSize: ARROW_BEVEL,
+      bevelSegments: 2,
+    })
+    frame.translate(0, 0, -ARROW_DEPTH / 2)
+    return {
+      frameGeo: frame,
+      backingGeo: new ShapeGeometry(new Shape(toVectors(inner))),
+      bulbs: pointsAlong(insetPolygon(ARROW_OUTLINE, ARROW_BORDER / 2), BULB_SPACING),
+    }
+  }, [])
+  const { texture: winTexture, aspect: winAspect } = useMemo(
+    () => makeLabelTexture('Win', { color: '#ffd23d', stroke: '#5a0d0d' }),
+    [],
+  )
+  // Even/odd bulbs share a material each, so the chase blink is two updates a frame.
+  const bulbMats = useMemo(
+    () => [0, 1].map(() => new MeshStandardMaterial({ color: BULB_COLOR, emissive: '#ffd86b', emissiveIntensity: 1 })),
+    [],
+  )
+  const bulbGeo = useMemo(() => new SphereGeometry(0.055, 10, 8), [])
+  useEffect(
+    () => () => {
+      frameGeo.dispose()
+      backingGeo.dispose()
+      winTexture.dispose()
+      bulbGeo.dispose()
+      bulbMats.forEach((m) => m.dispose())
+    },
+    [frameGeo, backingGeo, winTexture, bulbGeo, bulbMats],
+  )
+  useFrame(({ clock }) => {
+    const phase = Math.floor(clock.elapsedTime * 2.5) % 2
+    bulbMats.forEach((m, i) => {
+      m.emissiveIntensity = i === phase ? 2.2 : 0.5
+    })
+  })
+
+  const textHeight = 0.44
+  const textX = 0.4
+  const poleTop = (dx) => WIN_SIGN.y - ARROW_SHAFT_H + dx * Math.tan(ARROW_TILT) + 0.04
+  return (
+    <group position={[WIN_SIGN.x, GROUND_Y, WIN_SIGN.z]} scale={WIN_SIGN.scale} rotation-y={WIN_SIGN.yaw}>
+      {WIN_SIGN.poleDx.map((dx) => (
+        <group key={dx} position-x={dx}>
+          <mesh position-y={poleTop(dx) / 2} castShadow>
+            <cylinderGeometry args={[0.05, 0.05, poleTop(dx), 10]} />
+            <Mat color="#e6eaf0" emissive="#e6eaf0" emissiveIntensity={0.3} metalness={0.2} roughness={0.4} />
+          </mesh>
+          <mesh position-y={0.02} castShadow receiveShadow>
+            <cylinderGeometry args={[0.15, 0.17, 0.04, 16]} />
+            <Mat color="#e6eaf0" emissive="#e6eaf0" emissiveIntensity={0.3} metalness={0.2} roughness={0.4} />
+          </mesh>
+        </group>
+      ))}
+      <group position-y={WIN_SIGN.y} rotation-z={ARROW_TILT}>
+        <mesh geometry={frameGeo} castShadow>
+          <Mat color="#ff2a33" emissive="#ff2a33" emissiveIntensity={0.5} metalness={0.1} roughness={0.35} />
+        </mesh>
+        <mesh geometry={backingGeo}>
+          <Mat color="#4a2f5c" emissive="#4a2f5c" emissiveIntensity={0.4} side={DoubleSide} />
+        </mesh>
+        {[1, -1].map((side) => (
+          <mesh key={side} position={[textX, 0, side * 0.006]} rotation-y={side === 1 ? 0 : Math.PI}>
+            <planeGeometry args={[textHeight * winAspect, textHeight]} />
+            <meshBasicMaterial map={winTexture} transparent depthWrite={false} toneMapped={false} />
+          </mesh>
+        ))}
+        {[1, -1].map((side) =>
+          bulbs.map(([x, y], i) => (
+            <mesh
+              key={`${side}-${i}`}
+              geometry={bulbGeo}
+              material={bulbMats[i % 2]}
+              position={[x, y, side * (FRAME_FRONT_Z - 0.01)]}
+            />
+          )),
+        )}
+      </group>
     </group>
   )
 }
@@ -439,10 +670,10 @@ function Leaderboard({ x, z, title, color, stat }) {
   useEffect(() => () => texture.dispose(), [texture])
   return (
     <group position={[x, GROUND_Y, z]} rotation={[0, Math.PI, 0]}>
-      <Box size={[0.25, 3.2, 0.25]} position={[-1.5, 1.6, 0]} color={WOOD_DARK} />
-      <Box size={[0.25, 3.2, 0.25]} position={[1.5, 1.6, 0]} color={WOOD_DARK} />
-      <Box size={[3.4, 2.4, 0.3]} position={[0, 2.3, 0]} color={WOOD} />
-      <Box size={[3, 2, 0.05]} position={[0, 2.3, 0.17]} color="#5b3419" cast={false} />
+      <Box size={[0.25, 3.2, 0.25]} position={[-1.5, 1.6, 0]} color="#a26c3c" emissive="#a26c3c" emissiveIntensity={0.3} />
+      <Box size={[0.25, 3.2, 0.25]} position={[1.5, 1.6, 0]} color="#a26c3c" emissive="#a26c3c" emissiveIntensity={0.3} />
+      <Box size={[3.4, 2.4, 0.3]} position={[0, 2.3, 0]} color="#c68a4e" emissive="#c68a4e" emissiveIntensity={0.3} />
+      <Box size={[3, 2, 0.05]} position={[0, 2.3, 0.17]} color="#8a5a30" emissive="#8a5a30" emissiveIntensity={0.3} cast={false} />
       <mesh position={[0, 2.3, 0.2]}>
         <planeGeometry args={[2.7, 1.8]} />
         <meshBasicMaterial map={texture} toneMapped={false} />
@@ -498,6 +729,7 @@ export default function IslandLandmarks() {
       <SignBoard />
       <Shop />
       <Statue />
+      <WinSign />
       <Pets />
       <Obby />
       {LEADERBOARDS.map((b) => (
