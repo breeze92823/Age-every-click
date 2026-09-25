@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Quaternion, Vector3 } from 'three'
+import { AnimationMixer, Quaternion, Vector3 } from 'three'
 import { player } from '../systems/playerState.js'
 import { MATERIAL_PBR } from '../data/materials.js'
 import { authState, getEquippedAvatar, getProportions, onAvatarChanged, onProportionsChanged } from '../systems/bloxity.js'
@@ -10,10 +10,41 @@ import { useAuth } from './hud/hooks.js'
 const _up = new Vector3(0, 1, 0)
 const _targetQuat = new Quaternion()
 const TURN_RATE = 0.001 // base of 1 - TURN_RATE^delta; smaller = snappier turn
+const WALK_SPEED_THRESHOLD = 0.15 // m/s — above this, play "walk" instead of "idle"
+const CROSSFADE = 0.15 // seconds
 
-// The plain capsule + facing nub — always the signed-out character, and the
-// signed-in one too until (or unless) its real Bloxity avatar finishes
-// loading.
+// Matched against each clip's name (case-insensitive) rather than an exact
+// id — the SDK's own naming for the base rig's clips isn't documented, so
+// this takes the most plausible match per state rather than a confirmed one,
+// same spirit as avatarLoader.js's accessory bone matching.
+const CLIP_PATTERNS = {
+  idle: /idle/i,
+  walk: /walk|run/i,
+}
+
+function findClip(clips, pattern) {
+  return clips.find((c) => pattern.test(c.name)) || null
+}
+
+// Sentinel "nothing equipped" ids (see avatarCdn.js's isEquipped) — passing
+// this to assembleAvatar loads just the bare base rig from the CDN, which is
+// the Bloxity default character shown to guests and to signed-in players who
+// haven't equipped anything.
+const DEFAULT_EQUIPPED = {
+  hatId: null,
+  backId: null,
+  skinId: '-1',
+  headId: '-1',
+  armLId: '-1',
+  armRId: '-1',
+  legLId: '-1',
+  legRId: '-1',
+  torsoId: '-1',
+}
+
+// The plain capsule + facing nub — the last-resort fallback for when even
+// the bare Bloxity base rig can't be loaded (SDK unavailable, CDN blocked,
+// offline dev), so the scene is never left with no player mesh at all.
 function DefaultCharacter() {
   const { radius, height } = player.dims
   const cylinder = height - radius * 2
@@ -32,29 +63,24 @@ function DefaultCharacter() {
   )
 }
 
-// Loads the signed-in player's real Bloxity avatar in place of the default
-// capsule, and reloads it whenever they edit it in the customizer. Stays
-// null (default capsule keeps showing) when signed out, before the load
-// finishes, or if it fails — see systems/avatarLoader.js's own fallback
-// rules for why a partial/failed load still resolves rather than throwing.
+// Loads the Bloxity avatar in place of the fallback capsule: the signed-in
+// player's real equipped avatar, or the bare default rig (DEFAULT_EQUIPPED)
+// for a guest. Reloads whenever the player edits their avatar in the
+// customizer. Stays null (capsule keeps showing) before the load finishes or
+// if it fails outright — see systems/avatarLoader.js's own fallback rules
+// for why a partial/failed load still resolves rather than throwing.
 function useBloxityAvatar() {
   useAuth()
   const [avatar, setAvatar] = useState(null)
   const signedIn = !!authState.user
 
   useEffect(() => {
-    if (!signedIn) {
-      setAvatar(null)
-      return
-    }
-
     let cancelled = false
     const controller = new AbortController()
     let current = null
 
     async function load() {
-      const equipped = getEquippedAvatar()
-      if (!equipped) return
+      const equipped = (signedIn && getEquippedAvatar()) || DEFAULT_EQUIPPED
       const group = await assembleAvatar(equipped, { signal: controller.signal })
       if (cancelled || !group) return
       current = group
@@ -87,6 +113,34 @@ function useBloxityAvatar() {
 export default function Player() {
   const ref = useRef()
   const avatar = useBloxityAvatar()
+  const mixerRef = useRef(null)
+  const actionsRef = useRef({})
+  const activeActionRef = useRef(null)
+
+  // Rebuilt per loaded avatar — a mixer is bound to one root object, and the
+  // clips it carries (see avatarLoader.js) only exist once that root loads.
+  useEffect(() => {
+    mixerRef.current = null
+    actionsRef.current = {}
+    activeActionRef.current = null
+    if (!avatar) return
+
+    const mixer = new AnimationMixer(avatar)
+    const clips = avatar.animations || []
+    const actions = {}
+    for (const [name, pattern] of Object.entries(CLIP_PATTERNS)) {
+      const clip = findClip(clips, pattern)
+      if (clip) actions[name] = mixer.clipAction(clip)
+    }
+    if (actions.idle) {
+      actions.idle.play()
+      activeActionRef.current = actions.idle
+    }
+    mixerRef.current = mixer
+    actionsRef.current = actions
+
+    return () => mixer.stopAllAction()
+  }, [avatar])
 
   useFrame((_state, delta) => {
     const g = ref.current
@@ -94,6 +148,19 @@ export default function Player() {
     g.position.set(player.position.x, player.position.y, player.position.z)
     _targetQuat.setFromAxisAngle(_up, player.facing)
     g.quaternion.slerp(_targetQuat, 1 - Math.pow(TURN_RATE, delta))
+
+    const mixer = mixerRef.current
+    if (!mixer) return
+    mixer.update(delta)
+
+    const actions = actionsRef.current
+    const moving = Math.hypot(player.velocity.x, player.velocity.z) > WALK_SPEED_THRESHOLD
+    const next = (moving && actions.walk) || actions.idle || null
+    if (next && next !== activeActionRef.current) {
+      next.reset().fadeIn(CROSSFADE).play()
+      activeActionRef.current?.fadeOut(CROSSFADE)
+      activeActionRef.current = next
+    }
   })
 
   return <group ref={ref}>{avatar ? <primitive object={avatar} /> : <DefaultCharacter />}</group>

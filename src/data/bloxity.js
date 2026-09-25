@@ -2,7 +2,7 @@
 // here — systems/bloxity.js reads this. No SDK constant belongs in a
 // component.
 
-// TODO: replace with the slug this game is registered under on bloxity.io.
+// Slug this game is registered under on bloxity.io (https://bloxity.io/g/test-game).
 export const GAME_SLUG = 'age-every-click'
 
 // Profile picture shown for a guest (not signed in) or when a signed-in user

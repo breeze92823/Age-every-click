@@ -1,4 +1,4 @@
-import { ISLAND_WIDTH, ISLAND_DEPTH, SPAWN } from './world.js'
+import { ISLAND_WIDTH, ISLAND_DEPTH, ISLAND_SCALE, SPAWN } from './world.js'
 
 // Hub layout for the island, as data. Rects are [x0, z0, x1, z1] in world
 // metres; -Z is "north", the way the camera faces from the spawn. Scale
@@ -23,7 +23,7 @@ export const ENCLOSURES = [
 ]
 export const ENCLOSURE_BORDER = 1.2
 
-export const SPAWN_PAD = { x: SPAWN.x, z: SPAWN.z }
+export const SPAWN_PAD = { x: SPAWN.x / ISLAND_SCALE, z: SPAWN.z / ISLAND_SCALE }
 
 export const AGE_MACHINES = {
   z: -26.5,

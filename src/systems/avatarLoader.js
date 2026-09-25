@@ -130,6 +130,12 @@ export async function assembleAvatar(equipped, { signal } = {}) {
   if (signal?.aborted) return null
 
   const root = baseGltf.scene
+  // Only the base rig carries animation clips (idle/walk/...) — every part
+  // GLB is a static skinned mesh meant to ride the base rig's skeleton, per
+  // attachPartToBaseSkeleton above. Stashed on the root (not a real
+  // Object3D field, just a convenient carrier) so components/Player.jsx can
+  // hand it straight to an AnimationMixer without re-touching the loader.
+  root.animations = baseGltf.animations || []
   const skeleton = findSkeleton(root)
 
   if (skeleton) {

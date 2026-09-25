@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { MeshStandardMaterial } from 'three'
 import { MATERIAL_PBR } from '../data/materials.js'
-import { GROUND_Y, WATER_Y } from '../data/world.js'
+import { GROUND_Y, ISLAND_HEIGHT, ISLAND_SCALE } from '../data/world.js'
 import { CORE, EDGE, PATHS, ENCLOSURES, ENCLOSURE_BORDER } from '../data/island.js'
 import { makeStudTexture } from '../systems/studTexture.js'
 import { makeChevronTexture } from '../systems/canvasTextures.js'
@@ -14,7 +14,9 @@ import IslandLandmarks from './IslandLandmarks.jsx'
 // mesh. Decor and landmarks sit on top. Purely visual: playerMovement.js
 // clamps the player to GROUND_Y directly.
 const GRASS_DEPTH = 0.35
-const SAND_BOTTOM = WATER_Y - 0.6
+// Always reaches 0.6 m below the water once scaled, so a small scale never
+// lifts the island's base clear of the surface.
+const SAND_BOTTOM = GROUND_Y - (ISLAND_HEIGHT + 0.6) / ISLAND_SCALE
 const PATH_Y = GROUND_Y + 0.02
 const BED_Y = GROUND_Y + 0.03
 const CURB_HEIGHT = 0.14
@@ -104,7 +106,7 @@ export default function Island() {
   )
 
   return (
-    <group>
+    <group scale={ISLAND_SCALE} position-y={GROUND_Y * (1 - ISLAND_SCALE)}>
       {island.parts.map(({ geometry, material, castShadow = false }, i) => (
         <mesh key={i} geometry={geometry} material={material} receiveShadow castShadow={castShadow} />
       ))}
