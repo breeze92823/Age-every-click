@@ -4,6 +4,7 @@ import { step } from '../systems/playerMovement.js'
 import { update as updateCamera } from '../systems/cameraOrbit.js'
 import { step as stepActionPopups } from '../systems/actionPopups.js'
 import { notifyFirstFrame } from '../systems/bloxity.js'
+import { useGameStore } from '../store/useGameStore.js'
 
 // The single simulation tick. Rendered before the view components so its
 // useFrame subscribes first and runs first each frame.
@@ -13,6 +14,8 @@ export default function GameLoop() {
   useFrame(() => {
     const dt = tick()
     step(dt)
+    // No-ops unless the player is riding an Age Machine.
+    useGameStore.getState().tickAgeMachine(dt)
     updateCamera(camera, dt)
     // Projects the player to the screen and ages live "+N" popups.
     stepActionPopups(dt, camera)

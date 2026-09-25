@@ -1,11 +1,16 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { settings } from '../../systems/settingsState.js'
 import { playButtonClick, playButtonHover } from '../../systems/sfx.js'
 import { useGameStore } from '../../store/useGameStore.js'
 import { canAcceptRebirth, rebirthRequirement } from '../../data/progression.js'
 import { SHOP_ITEMS } from '../../data/shop.js'
-import { makeStudOverlayDataURL } from '../../systems/studTexture.js'
+import { formatCompact } from '../../systems/format.js'
+import { resetPlayer } from '../../systems/playerState.js'
+import { SPAWN, ISLAND_SCALE } from '../../data/world.js'
+import { OBBY, AGE_MACHINES } from '../../data/island.js'
+import { AGE_MACHINE_RADIUS } from '../../systems/ageMachineCollision.js'
+import { AGE_MACHINES_TOP_Y } from '../../systems/terrainHeight.js'
 import TouchControls from './TouchControls.jsx'
 import RotatePrompt from './RotatePrompt.jsx'
 import LevelBar from './LevelBar.jsx'
@@ -16,6 +21,9 @@ import AuthPanel from './AuthPanel.jsx'
 import IdentityChip from './IdentityChip.jsx'
 import ActionResult from './ActionResult.jsx'
 import ActionPopups from './ActionPopups.jsx'
+import BonusTimer from './BonusTimer.jsx'
+import InteractPrompt from './InteractPrompt.jsx'
+import { actionResultState } from '../../systems/actionResult.js'
 import { useSettings, useTouchMode } from './hooks.js'
 
 // This Hud is ported from Ice-Skate's components/hud/Hud.jsx: same LevelBar/
@@ -28,21 +36,6 @@ import { useSettings, useTouchMode } from './hooks.js'
 // gain from Ice-Skate (systems/speedGain.js) was removed since this game
 // has no such mechanic, and no click-to-gain button or Set Speed badge
 // exists in this HUD yet.
-
-// 1000 -> "1K", 1500 -> "1.5K", 2_000_000 -> "2M". Trims a trailing ".0".
-function formatCompact(n) {
-  const abs = Math.abs(n)
-  if (abs < 1000) return String(n)
-  const units = [
-    { value: 1e9, suffix: 'B' },
-    { value: 1e6, suffix: 'M' },
-    { value: 1e3, suffix: 'K' },
-  ]
-  const { value, suffix } = units.find((u) => abs >= u.value)
-  const scaled = n / value
-  const text = scaled.toFixed(1).replace(/\.0$/, '')
-  return `${text}${suffix}`
-}
 
 // Shared chrome for every left-center HUD popup (Rebirth, Shop): a
 // transparent panel with the title floating above its top-left corner and
@@ -91,12 +84,6 @@ function RebirthWindow({ rebirth, canRebirth, onConfirm, onClose, isTouch }) {
   return (
     <HudModal title="Rebirth" onClose={onClose} isTouch={isTouch}>
       <div className={`flex items-center justify-center ${isTouch ? 'gap-2 text-2xl' : 'gap-6 text-[3.625rem]'}`}>
-        <img
-          src="/ui/action_popup.png"
-          alt=""
-          className={isTouch ? 'h-9 w-9' : 'h-[5.5rem] w-[5.5rem]'}
-          draggable={false}
-        />
         <span className="font-bold text-amber-300">X{rebirth}</span>
         <span
           className={`inline-block font-black leading-none text-white ${isTouch ? 'text-2xl' : 'text-[4.5rem]'}`}
@@ -104,12 +91,6 @@ function RebirthWindow({ rebirth, canRebirth, onConfirm, onClose, isTouch }) {
         >
           ▶
         </span>
-        <img
-          src="/ui/action_popup.png"
-          alt=""
-          className={isTouch ? 'h-9 w-9' : 'h-[5.5rem] w-[5.5rem]'}
-          draggable={false}
-        />
         <span className="font-bold text-amber-300">X{rebirth + 1}</span>
       </div>
 
@@ -117,7 +98,7 @@ function RebirthWindow({ rebirth, canRebirth, onConfirm, onClose, isTouch }) {
         className={`text-center font-bold text-red-500 ${isTouch ? 'text-sm' : 'text-[1.625rem]'}`}
         style={{ WebkitTextStroke: isTouch ? '1.5px black' : '3px black', paintOrder: 'stroke fill' }}
       >
-        Rebirth resets your Speed and Level!
+        Rebirth resets your Age and Level!
       </div>
 
       <div className="w-full">
@@ -155,9 +136,9 @@ function BuxIcon({ className }) {
 const BUX_BUY_ENABLED = false
 
 function ShopItemCard({ item, isTouch }) {
-  const wins = useGameStore((s) => s.wins)
-  const buyShopItemWithWins = useGameStore((s) => s.buyShopItemWithWins)
-  const canAffordWins = wins >= item.winsRequired
+  const coins = useGameStore((s) => s.coins)
+  const buyShopItemWithCoins = useGameStore((s) => s.buyShopItemWithCoins)
+  const canAffordCoins = coins >= item.coinsRequired
   const textOutlineLocal = { WebkitTextStroke: isTouch ? '1px black' : '1.5px black', paintOrder: 'stroke fill' }
   return (
     <div
@@ -202,14 +183,14 @@ function ShopItemCard({ item, isTouch }) {
           type="button"
           onClick={() => {
             playButtonClick()
-            buyShopItemWithWins(item.id)
+            buyShopItemWithCoins(item.id)
           }}
-          disabled={!canAffordWins}
+          disabled={!canAffordCoins}
           className={`flex w-full items-center justify-center gap-1 rounded-lg border-2 border-black bg-gradient-to-b from-amber-300 to-amber-500 font-black text-white transition hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100 ${isTouch ? 'py-1 text-sm' : 'py-2 text-lg'}`}
           style={textOutlineLocal}
         >
-          <span>🏆</span>
-          <span>{formatCompact(item.winsRequired)}</span>
+          <span>🪙</span>
+          <span>{formatCompact(item.coinsRequired)}</span>
         </button>
       </div>
     </div>
@@ -235,13 +216,7 @@ function ShopWindow({ onClose, isTouch }) {
   )
 }
 
-// Tile size (CSS px) for the toolbar buttons' stud overlay.
-const TOOLBAR_BUTTON_STUD_PITCH = 14
-
-const REBIRTH_BUTTON_GRADIENT = 'linear-gradient(180deg, #FFA4FA 0%, #FF4BC2 100%)'
-const SHOP_BUTTON_GRADIENT = 'linear-gradient(180deg, #ffe9a4 0%, #ff9d00 100%)'
-
-function ToolbarButton({ gradient, studOverlay, icon, label, onClick, isTouch }) {
+function ToolbarButton({ icon, label, onClick, isTouch }) {
   return (
     <button
       type="button"
@@ -251,19 +226,27 @@ function ToolbarButton({ gradient, studOverlay, icon, label, onClick, isTouch })
       }}
       onMouseEnter={playButtonHover}
       title={`Open ${label}`}
-      className={`pointer-events-auto flex flex-col items-center justify-center gap-1 rounded-lg border-2 border-black text-slate-100 shadow-lg transition hover:scale-110 hover:brightness-110 ${
+      className={`pointer-events-auto flex flex-col items-center justify-center gap-1 rounded-lg text-slate-100 transition hover:scale-110 hover:brightness-110 ${
         isTouch ? 'h-12 w-12' : 'h-20 w-20'
       }`}
-      style={{
-        backgroundImage: `${studOverlay}, ${gradient}`,
-        backgroundRepeat: 'repeat, no-repeat',
-        backgroundSize: `${TOOLBAR_BUTTON_STUD_PITCH}px ${TOOLBAR_BUTTON_STUD_PITCH}px, 100% 100%`,
-      }}
     >
-      <span className={isTouch ? 'text-lg leading-none' : 'text-2xl leading-none'}>{icon}</span>
       <span
-        className={isTouch ? 'text-[7px] font-semibold leading-none tracking-wide' : 'text-xs font-semibold tracking-wide'}
-        style={{ WebkitTextStroke: isTouch ? '1px black' : '2px black', paintOrder: 'stroke fill' }}
+        className="leading-none"
+        style={{
+          fontSize: isTouch ? '2.25rem' : '3rem',
+          WebkitTextStroke: '5px black',
+          paintOrder: 'stroke fill',
+        }}
+      >
+        {icon}
+      </span>
+      <span
+        className="font-semibold leading-none tracking-wide"
+        style={{
+          fontSize: isTouch ? '14px' : '1.5rem',
+          WebkitTextStroke: '2px black',
+          paintOrder: 'stroke fill',
+        }}
       >
         {label}
       </span>
@@ -271,17 +254,56 @@ function ToolbarButton({ gradient, studOverlay, icon, label, onClick, isTouch })
   )
 }
 
-// Left-edge, vertically centred stack: wins count above, a small toolbar of
-// economy panels below (Rebirth/Shop).
+// Right-edge, vertically centred: the coins count pill on its own.
+function RightCenterCoins() {
+  const coins = useGameStore((s) => s.coins)
+  const isTouch = useTouchMode()
+
+  const coinsPill = (
+    <div className={`flex items-center gap-1 text-slate-100 ${isTouch ? 'px-2 py-1.5' : 'gap-2 px-3 py-2'}`}>
+      <span aria-hidden="true" className={isTouch ? 'text-[2.5rem] leading-none' : 'text-[3.75rem] leading-none'}>
+        🪙
+      </span>
+      <span
+        className="font-bold tabular-nums"
+        style={{
+          fontSize: isTouch ? '1.7rem' : '2.25rem',
+          lineHeight: 1,
+          color: '#ffd21e',
+          letterSpacing: '-0.02em',
+          WebkitTextStroke: isTouch ? '1.5px #000000' : '2px #000000',
+          paintOrder: 'stroke fill',
+        }}
+      >
+        {formatCompact(coins)}
+      </span>
+    </div>
+  )
+
+  if (isTouch) {
+    return (
+      <div data-hud="right-center" className="pointer-events-none absolute right-4 top-24 flex flex-col items-end gap-2">
+        {coinsPill}
+      </div>
+    )
+  }
+
+  return (
+    <div data-hud="right-center" className="pointer-events-none absolute right-4 top-1/2 flex -translate-y-1/2 flex-col items-center gap-3">
+      {coinsPill}
+    </div>
+  )
+}
+
+// Left-edge, vertically centred stack: a small toolbar of economy panels
+// (Rebirth/Shop).
 function LeftCenterControls() {
-  const wins = useGameStore((s) => s.wins)
   const level = useGameStore((s) => s.level)
   const rebirth = useGameStore((s) => s.rebirth)
   const canRebirth = useGameStore((s) => canAcceptRebirth(s.level, s.rebirth))
   const acceptRebirth = useGameStore((s) => s.acceptRebirth)
   const [openWindow, setOpenWindow] = useState(null) // null | 'rebirth' | 'shop'
   const isTouch = useTouchMode()
-  const studOverlay = useMemo(() => `url(${makeStudOverlayDataURL(TOOLBAR_BUTTON_STUD_PITCH)})`, [])
 
   const modal = {
     rebirth: (
@@ -301,50 +323,54 @@ function LeftCenterControls() {
 
   const portal = modal && createPortal(modal, document.body)
 
-  const winsPill = (
-    <div className={`flex items-center gap-1 text-slate-100 ${isTouch ? 'px-2 py-1.5' : 'gap-2 px-3 py-2'}`}>
-      <img src="/ui/xp_cup.png" alt="" className={isTouch ? 'h-5 w-5' : 'h-8 w-8'} draggable={false} />
-      <span
-        className="font-bold tabular-nums"
-        style={{
-          fontSize: isTouch ? '0.85rem' : '1.125rem',
-          lineHeight: 1,
-          color: '#ffd21e',
-          letterSpacing: '-0.02em',
-          WebkitTextStroke: isTouch ? '1.5px #000000' : '2px #000000',
-          paintOrder: 'stroke fill',
-        }}
-      >
-        {formatCompact(wins)}
-      </span>
-    </div>
-  )
+  const goToObby = () => {
+    useGameStore.getState().setScene('island')
+    resetPlayer({ x: OBBY.x * ISLAND_SCALE, y: SPAWN.y, z: OBBY.signZ * ISLAND_SCALE })
+  }
+
+  const goToSpawn = () => {
+    useGameStore.getState().setScene('island')
+    resetPlayer(SPAWN)
+  }
+
+  const rowClassName = `flex items-center ${isTouch ? 'gap-1.5' : 'flex-wrap justify-center gap-2'}`
 
   const buttons = (
-    <div className={`flex items-center ${isTouch ? 'gap-1.5' : 'flex-wrap justify-center gap-2'}`}>
-      <ToolbarButton
-        gradient={REBIRTH_BUTTON_GRADIENT}
-        studOverlay={studOverlay}
-        icon="⭐"
-        label="Rebirth"
-        onClick={() => setOpenWindow('rebirth')}
-        isTouch={isTouch}
-      />
-      <ToolbarButton
-        gradient={SHOP_BUTTON_GRADIENT}
-        studOverlay={studOverlay}
-        icon="🛒"
-        label="Shop"
-        onClick={() => setOpenWindow('shop')}
-        isTouch={isTouch}
-      />
+    <div className="flex flex-col items-center gap-2">
+      <div className={rowClassName}>
+        <ToolbarButton
+          icon="⭐"
+          label="Rebirth"
+          onClick={() => setOpenWindow('rebirth')}
+          isTouch={isTouch}
+        />
+        <ToolbarButton
+          icon="🛒"
+          label="Shop"
+          onClick={() => setOpenWindow('shop')}
+          isTouch={isTouch}
+        />
+      </div>
+      <div className={rowClassName}>
+        <ToolbarButton
+          icon="🌌"
+          label="Obby"
+          onClick={goToObby}
+          isTouch={isTouch}
+        />
+        <ToolbarButton
+          icon="🚩"
+          label="Spawn"
+          onClick={goToSpawn}
+          isTouch={isTouch}
+        />
+      </div>
     </div>
   )
 
   if (isTouch) {
     return (
       <div data-hud="left-center" className="pointer-events-none absolute left-4 top-24 flex flex-col items-start gap-2">
-        {winsPill}
         {buttons}
         {portal}
       </div>
@@ -353,17 +379,62 @@ function LeftCenterControls() {
 
   return (
     <div data-hud="left-center" className="pointer-events-none absolute left-4 top-1/2 flex -translate-y-1/2 flex-col items-center gap-3">
-      {winsPill}
       {buttons}
       {portal}
     </div>
   )
 }
 
+// Bottom-center, only while riding an Age Machine (see useGameStore's
+// ridingAgeMachine) — the sole way out once playerMovement.js has frozen
+// the player on the machine's stand.
+// Cleared past AGE_MACHINE_RADIUS so the exit spot sits outside the
+// machine's own collision circle — landing exactly on it (margin 0) would
+// still work since it's non-zero, but this keeps the player from spawning
+// right on the boundary.
+const RETURN_EXIT_MARGIN = 0.5
+
+function ReturnButton() {
+  const riding = useGameStore((s) => s.ridingAgeMachine)
+  const exitAgeMachine = useGameStore((s) => s.exitAgeMachine)
+  const isTouch = useTouchMode()
+
+  if (riding == null) return null
+
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-30 flex justify-center">
+      <button
+        type="button"
+        onClick={() => {
+          playButtonClick()
+          // Places the player just outside the glass, on the machine's +Z
+          // (camera-facing) side — the same side they walked up from to hit
+          // Use — rather than leaving them dead-center, where
+          // resolveAgeMachineCollision's push-out no-ops (distSq ~ 0).
+          const mid = (AGE_MACHINES.tiers.length - 1) / 2
+          const x = (riding - mid) * AGE_MACHINES.spacing
+          const z = AGE_MACHINES.z + AGE_MACHINE_RADIUS + RETURN_EXIT_MARGIN
+          resetPlayer({ x: x * ISLAND_SCALE, y: AGE_MACHINES_TOP_Y, z: z * ISLAND_SCALE })
+          exitAgeMachine()
+        }}
+        onMouseEnter={playButtonHover}
+        className={`pointer-events-auto rounded-full border-2 border-black bg-gradient-to-b from-sky-400 to-blue-600 font-black text-white shadow-[0_4px_0_rgba(0,0,0,0.4)] transition hover:brightness-110 active:brightness-95 ${
+          isTouch ? 'px-6 py-2 text-base' : 'px-10 py-3 text-xl'
+        }`}
+        style={{ WebkitTextStroke: isTouch ? '1px black' : '1.5px black', paintOrder: 'stroke fill' }}
+      >
+        Return
+      </button>
+    </div>
+  )
+}
+
 // DOM siblings of the canvas, never drei <Html>. Ported from Ice-Skate's
 // components/hud/Hud.jsx; its merchant/hexPad/afk "Press E" proximity
-// prompts and death prompt are dropped — this template has no such props,
-// no PVP zone, and no held-E interaction system.
+// prompts and death prompt are dropped (this template has no such props and
+// no PVP zone) — but entering the Impossible Bridge/Stud Jumps/Tsunami
+// Escape obby scenes does reuse the "Press E" mechanism, via InteractPrompt
+// below (see systems/scenePortals.js).
 export default function Hud() {
   useSettings()
 
@@ -374,6 +445,17 @@ export default function Hud() {
     backgroundColor: `rgba(0, 0, 0, ${(settings.background_transparency * 0.4).toFixed(3)})`,
   }
 
+  const actionResultRef = useRef(null)
+  useEffect(() => {
+    let lastId = actionResultState.id
+    const intervalId = setInterval(() => {
+      if (actionResultState.id === lastId) return
+      lastId = actionResultState.id
+      actionResultRef.current?.show(actionResultState.text, actionResultState.success)
+    }, 100)
+    return () => clearInterval(intervalId)
+  }, [])
+
   return (
     <div className="pointer-events-none absolute inset-0 p-4 font-mono text-xs leading-5 text-slate-200">
       {/* First child: the touch look-zone/stick paint beneath the
@@ -382,23 +464,28 @@ export default function Hud() {
 
       <LeftCenterControls />
 
+      <RightCenterCoins />
+
       {/* Top-left identity chip: dev-only diagnostic — renders null
          otherwise. Event-driven, never per frame. */}
       <IdentityChip panelStyle={panelStyle} />
 
       <AuthPanel panelStyle={panelStyle} />
 
-      {/* Top-centre buy/equip result popup — green on success, red with the
-         reason on failure. Driven imperatively; nothing calls it yet in
-         this template (no gated purchase can fail silently the way
-         Ice-Skate's held-E actions could), kept wired for parity. */}
-      <ActionResult />
+      {/* Bottom-centre buy/equip result popup — green on success, red with the
+         reason on failure. Driven imperatively via actionResultRef; used by
+         IslandLandmarks.jsx's Age Machine BuyButton to report "Need N Coins
+         to Buy" when a purchase is attempted without enough coins. */}
+      <ActionResult ref={actionResultRef} />
 
-      {/* Bottom-centre level progress bar. DOM sibling of the canvas. */}
+      {/* Top-centre level progress bar. DOM sibling of the canvas. */}
       <LevelBar />
 
       {/* Top-centre "LEVEL UP!" banner. */}
       <LevelUpPopup />
+
+      {/* Top-centre glass-bridge countdown, Bonus Scene only. */}
+      <BonusTimer />
 
       {/* Top-centre multiplayer status pill — renders nothing while
          systems/net.js's stub stays 'idle' (no backend configured). */}
@@ -407,6 +494,14 @@ export default function Hud() {
       {/* Per-walk-tick "+N" speed badges around the player. Owns its own
          rAF loop and never re-renders. */}
       <ActionPopups />
+
+      {/* Bottom-center "Return" button — only visible while riding an Age
+         Machine, the sole way out of its movement freeze. */}
+      <ReturnButton />
+
+      {/* Bottom-center "Press E to ..." pill — armed while standing on one
+         of the island's obby entry pads (see systems/scenePortals.js). */}
+      <InteractPrompt />
 
       {/* Full-screen "rotate to landscape" gate for touch sessions. Last
          child + highest z-index so it covers the touch controls while up. */}

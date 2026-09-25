@@ -1,3 +1,5 @@
+import { showMenu } from './bloxity.js'
+
 // inputState: a keyboard turn (-1 A/Left .. +1 D/Right, consumed by
 // cameraOrbit to yaw the camera), a forward/back move flag (W/S, consumed
 // camera-relative by playerMovement), a mouse-drag look delta + wheel zoom
@@ -11,6 +13,7 @@ export const inputState = {
   look: { dx: 0, dy: 0 }, // pixels dragged this frame; consumed by cameraOrbit
   zoom: 0, // wheel delta this frame; consumed by cameraOrbit
   jump: false, // set on keydown, consumed by playerMovement
+  interact: false, // edge-triggered on KeyE keydown; consumed by playerMovement's obby pad checks
 }
 
 // Touch sessions have no keyboard: components/hud/TouchControls.jsx drives
@@ -52,6 +55,10 @@ export function pressTouchJump() {
   inputState.jump = true
 }
 
+export function pressTouchInteract() {
+  inputState.interact = true
+}
+
 const held = new Set()
 let orbiting = false
 let installed = false
@@ -74,6 +81,8 @@ function onKeyDown(e) {
   if (e.repeat) return
   held.add(e.code)
   if (e.code === 'Space') inputState.jump = true
+  if (e.code === 'KeyE') inputState.interact = true
+  if (e.code === 'Escape') showMenu() // opens the portal's own pause menu
   recomputeMove()
   recomputeTurn()
 }
@@ -120,6 +129,7 @@ function onBlur() {
   held.clear()
   orbiting = false
   inputState.jump = false
+  inputState.interact = false
   recomputeMove()
   recomputeTurn()
 }

@@ -11,6 +11,8 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { TextureLoader, MeshStandardMaterial } from 'three'
 import { MATERIAL_PBR } from '../data/materials.js'
+import { RIG_HEIGHT } from '../data/bloxity.js'
+import { player } from './playerState.js'
 import {
   baseRigUrl,
   partUrl,
@@ -130,6 +132,19 @@ export async function assembleAvatar(equipped, { signal } = {}) {
   if (signal?.aborted) return null
 
   const root = baseGltf.scene
+  // Only the base rig carries animation clips (idle/walk/...) — every part
+  // GLB is a static skinned mesh meant to ride the base rig's skeleton, per
+  // attachPartToBaseSkeleton above. Stashed on the root (not a real
+  // Object3D field, just a convenient carrier) so components/Player.jsx can
+  // hand it straight to systems/avatarAnim.js without re-touching the
+  // loader. `nodes` is a name -> node lookup of the whole rig (bones
+  // included) — avatarAnim.js's generated walk cycle keys ArmL1/ArmR1/
+  // LegL1/LegR1/Spine1 by these exact names, per the shared Bloxity rig.
+  root.animations = baseGltf.animations || []
+  root.nodes = {}
+  root.traverse((o) => {
+    if (o.name) root.nodes[o.name] = o
+  })
   const skeleton = findSkeleton(root)
 
   if (skeleton) {
@@ -177,4 +192,39 @@ export async function assembleAvatar(equipped, { signal } = {}) {
   }
 
   return root
+}
+
+// Rescales an already-assembled avatar per SDK.avatar.getProportions(). Safe
+// to call repeatedly (e.g. from onProportionsChanged) since it only mutates
+// existing bone transforms, no reload needed.
+//
+// Only `height`, `headScale`, `neckHeight` and `torsoScaleX` are applied —
+// each maps to one bone this codebase can already name with reasonable
+// confidence (same head/spine patterns attachAccessory above uses).
+// `shoulderWidth`, `armLength` and `legOffsetX` are left untouched: they'd
+// need distinguishing the left/right bone of a symmetric pair, and the SDK
+// doesn't document that naming convention — guessing wrong would silently
+// warp the mesh, which is worse than the slider having no visible effect.
+export function applyProportions(root, proportions) {
+  if (!root || !proportions) return
+
+  const height = Number.isFinite(proportions.height) ? proportions.height : 1
+  // Uniform scale: the rig ships at RIG_HEIGHT units tall (native bind
+  // pose), so this both converts it into the game's metres and applies the
+  // SDK's height multiplier in one step. A Y-only scale here would leave
+  // the rig at its raw ~6.4 units — about 3.5x the capsule's 1.8m — while
+  // only stretching it vertically on top of that.
+  root.scale.setScalar((player.dims.height / RIG_HEIGHT) * height)
+
+  const skeleton = findSkeleton(root)
+  if (!skeleton) return
+
+  const head = findBone(skeleton, /head/i)
+  if (head) head.scale.setScalar(Number.isFinite(proportions.headScale) ? proportions.headScale : 1)
+
+  const neck = findBone(skeleton, /neck/i)
+  if (neck) neck.scale.y = Number.isFinite(proportions.neckHeight) ? proportions.neckHeight : 1
+
+  const torso = findBone(skeleton, /spine|chest|torso/i)
+  if (torso) torso.scale.x = Number.isFinite(proportions.torsoScaleX) ? proportions.torsoScaleX : 1
 }

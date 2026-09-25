@@ -1,11 +1,13 @@
 import { useEffect, useMemo } from 'react'
+import { useFrame } from '@react-three/fiber'
 import { MeshStandardMaterial } from 'three'
 import { MATERIAL_PBR } from '../data/materials.js'
-import { GROUND_Y, WATER_Y } from '../data/world.js'
-import { CORE, EDGE, PATHS, ENCLOSURES, ENCLOSURE_BORDER } from '../data/island.js'
+import { GROUND_Y, ISLAND_HEIGHT, ISLAND_SCALE } from '../data/world.js'
+import { CORE, EDGE, PATHS, ENCLOSURES, ENCLOSURE_BORDER, CURB_HEIGHT, BED_DEPTH, GRASS_RECTS } from '../data/island.js'
 import { makeStudTexture } from '../systems/studTexture.js'
 import { makeChevronTexture } from '../systems/canvasTextures.js'
 import { flatRect, slab, directedStrip, merge } from '../systems/levelGeometry.js'
+import { curbStrips } from '../systems/conveyor.js'
 import IslandDecor from './IslandDecor.jsx'
 import IslandLandmarks from './IslandLandmarks.jsx'
 
@@ -14,33 +16,26 @@ import IslandLandmarks from './IslandLandmarks.jsx'
 // mesh. Decor and landmarks sit on top. Purely visual: playerMovement.js
 // clamps the player to GROUND_Y directly.
 const GRASS_DEPTH = 0.35
-const SAND_BOTTOM = WATER_Y - 0.6
+// Always reaches 0.6 m below the water once scaled, so a small scale never
+// lifts the island's base clear of the surface.
+const SAND_BOTTOM = GROUND_Y - (ISLAND_HEIGHT + 0.6) / ISLAND_SCALE
 const PATH_Y = GROUND_Y + 0.02
-const BED_Y = GROUND_Y + 0.03
-const CURB_HEIGHT = 0.14
+const BED_Y = GROUND_Y + BED_DEPTH
+// Texture-space units per second scrolled along each strip's U axis (1 unit
+// = one border width), so the chevrons crawl forward like a conveyor belt.
+const CHEVRON_SPEED = -0.35
 
 function insetRect([x0, z0, x1, z1], d) {
   return [x0 + d, z0 + d, x1 - d, z1 - d]
 }
 
-// The curb as a pinwheel of four non-overlapping strips, so the chevrons on
-// top never z-fight at the corners. Directions run clockwise seen from above.
-function curbStrips([x0, z0, x1, z1], b) {
-  return [
-    { rect: [x0, z0, x1 - b, z0 + b], dir: 0 },
-    { rect: [x1 - b, z0, x1, z1 - b], dir: -Math.PI / 2 },
-    { rect: [x0 + b, z1 - b, x1, z1], dir: Math.PI },
-    { rect: [x0, z0 + b, x0 + b, z1], dir: Math.PI / 2 },
-  ]
-}
-
 function buildIsland() {
-  const grassRects = [CORE, ...EDGE.filter((c) => c.grass).map((c) => c.grass)]
+  const grassRects = GRASS_RECTS
   const sandRects = [CORE, ...EDGE.map((c) => c.sand)]
   const strips = ENCLOSURES.flatMap((r) => curbStrips(r, ENCLOSURE_BORDER))
   const curbTop = GROUND_Y + CURB_HEIGHT
 
-  const grassTexture = makeStudTexture({ light: '#8fd84e', dark: '#86cf47', repeatX: 1, repeatY: 1 })
+  const grassTexture = makeStudTexture({ light: '#7cc350', dark: '#74b849', repeatX: 1, repeatY: 1 })
   const pathTexture = makeStudTexture({ light: '#cfd2d8', dark: '#c6c9d0', repeatX: 1, repeatY: 1 })
   const chevronTexture = makeChevronTexture({ color: '#8d929c', background: '#484c55' })
 
@@ -55,12 +50,12 @@ function buildIsland() {
     },
     {
       geometry: merge(grassRects.map((r) => slab(r, GROUND_Y - GRASS_DEPTH, GROUND_Y - 0.005))),
-      material: new MeshStandardMaterial({ color: '#63b536', ...MATERIAL_PBR.ISLAND_SIDE }),
+      material: new MeshStandardMaterial({ color: '#579c33', ...MATERIAL_PBR.ISLAND_SIDE }),
       castShadow: true,
     },
     {
       geometry: merge(sandRects.map((r) => slab(r, SAND_BOTTOM, GROUND_Y - GRASS_DEPTH))),
-      material: new MeshStandardMaterial({ color: '#e2cc8f', ...MATERIAL_PBR.ISLAND_SIDE }),
+      material: new MeshStandardMaterial({ color: '#d4bd82', ...MATERIAL_PBR.ISLAND_SIDE }),
     },
     {
       geometry: merge(PATHS.map((r) => flatRect(r, PATH_Y))),
@@ -85,11 +80,16 @@ function buildIsland() {
     },
   ]
 
-  return { parts, textures: [grassTexture, pathTexture, chevronTexture] }
+  return { parts, textures: [grassTexture, pathTexture, chevronTexture], chevronTexture }
 }
 
 export default function Island() {
   const island = useMemo(buildIsland, [])
+
+  useFrame((_state, delta) => {
+    const t = island.chevronTexture
+    t.offset.x = (t.offset.x + delta * CHEVRON_SPEED) % 1
+  })
 
   // three.js does not GC GPU memory.
   useEffect(
@@ -104,7 +104,7 @@ export default function Island() {
   )
 
   return (
-    <group>
+    <group scale={ISLAND_SCALE} position-y={GROUND_Y * (1 - ISLAND_SCALE)}>
       {island.parts.map(({ geometry, material, castShadow = false }, i) => (
         <mesh key={i} geometry={geometry} material={material} receiveShadow castShadow={castShadow} />
       ))}

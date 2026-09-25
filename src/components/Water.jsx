@@ -6,7 +6,7 @@ import { WATER_WIDTH, WATER_DEPTH, WATER_Y } from '../data/world.js'
 // The old flat ground plane, now the sea the island sits in: a plain,
 // slightly translucent blue plate. Purely visual, same as the ground it
 // replaces — playerMovement.js only ever clamps to the island's surface.
-const WATER_COLOR = '#2f79c9'
+const WATER_COLOR = '#3572ab'
 
 export default function Water() {
   const material = useMemo(
@@ -16,6 +16,7 @@ export default function Water() {
         transparent: true,
         opacity: 0.85,
         side: DoubleSide,
+        depthWrite: false,
         ...MATERIAL_PBR.WATER,
       }),
     [],
@@ -25,7 +26,13 @@ export default function Water() {
   useEffect(() => () => material.dispose(), [material])
 
   return (
-    <mesh position={[0, WATER_Y, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow material={material}>
+    <mesh
+      position={[0, WATER_Y, 0]}
+      rotation={[-Math.PI / 2, 0, 0]}
+      receiveShadow
+      material={material}
+      renderOrder={-1}
+    >
       <planeGeometry args={[WATER_WIDTH, WATER_DEPTH]} />
     </mesh>
   )

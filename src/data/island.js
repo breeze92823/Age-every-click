@@ -1,4 +1,7 @@
-import { ISLAND_WIDTH, ISLAND_DEPTH, SPAWN } from './world.js'
+import { ISLAND_WIDTH, ISLAND_DEPTH, ISLAND_SCALE, SPAWN } from './world.js'
+import { REWARD_COINS as BRIDGE_REWARD_COINS } from './bonusBridge.js'
+import { MIN_REWARD as STUD_JUMPS_MIN_REWARD } from './studJumpsScene.js'
+import { REWARD_COINS as TSUNAMI_REWARD_COINS } from './tsunamiScene.js'
 
 // Hub layout for the island, as data. Rects are [x0, z0, x1, z1] in world
 // metres; -Z is "north", the way the camera faces from the spawn. Scale
@@ -22,13 +25,40 @@ export const ENCLOSURES = [
   [-11, -4, 11, 7],
 ]
 export const ENCLOSURE_BORDER = 1.2
+// Curb ring height and grass-bed depth, both above GROUND_Y (local, i.e.
+// pre-ISLAND_SCALE) — shared by the island mesh and by terrainHeight.js,
+// which turns them into a physical step the player climbs instead of clipping.
+export const CURB_HEIGHT = 0.14
+export const BED_DEPTH = 0.03
 
-export const SPAWN_PAD = { x: SPAWN.x, z: SPAWN.z }
+export const SPAWN_PAD = { x: SPAWN.x / ISLAND_SCALE, z: SPAWN.z / ISLAND_SCALE }
+
+// One tier per machine, left to right — name/rate/dome color match the
+// reference art. Molten also glows a little to read as lava rather than
+// flat black. `ageRate` is `rate`'s number (Age gained per second while
+// riding the machine — see useGameStore's tickAgeMachine); `rate` stays the
+// display string so the two can't drift, but is kept as-authored since
+// canvasTextures.js already renders it verbatim.
+const AGE_MACHINE_TIERS = [
+  { name: 'Basic', rate: '+1 Age/s', ageRate: 1, color: '#eef1f6', price: 100 },
+  { name: 'Double', rate: '+2 Age/s', ageRate: 2, color: '#9096a1', price: 2000 },
+  { name: 'Gold', rate: '+3 Age/s', ageRate: 3, color: '#ffcb3d', price: 3500 },
+  { name: 'VIP', rate: '+4 Age/s', ageRate: 4, color: '#ff5b7f', price: 5000 },
+  { name: 'Diamond', rate: '+5 Age/s', ageRate: 5, color: '#5fc9ff', price: 6500 },
+  { name: 'Emerald', rate: '+6 Age/s', ageRate: 6, color: '#3ddb6a', price: 8000 },
+  { name: 'Molten', rate: '+7 Age/s', ageRate: 7, color: '#231710', emissive: '#ff5a1f', emissiveIntensity: 0.6, price: 9500 },
+]
 
 export const AGE_MACHINES = {
   z: -26.5,
   spacing: 2.4,
-  colors: ['#eef1f6', '#8a8f99', '#a35bdc', '#f5a623', '#3cc4e8', '#39d353', '#a0632e'],
+  // Stand footprint/height, both local (pre-ISLAND_SCALE) — shared by the
+  // landmark mesh and by terrainHeight.js so the player steps onto it
+  // instead of clipping through.
+  standDepth: 3,
+  standHeight: 0.4,
+  tiers: AGE_MACHINE_TIERS,
+  colors: AGE_MACHINE_TIERS.map((t) => t.color),
 }
 
 export const FREE_BOOTH = { x: -3, z: -20 }
@@ -37,19 +67,32 @@ export const SHOP = { x: -2.5, z: 1 }
 export const STATUE = { x: 5, z: 1, yaw: -0.5 }
 export const PETS = { x: 19.5, z: -25 }
 
+// Temporarily hidden (not yet content-ready) — the "FREE"/"SHOP"/"PETS"
+// billboard labels above those landmarks only render when explicitly opted
+// into via .env. The models themselves (and their collision) stay as-is.
+// See .env.example.
+export const SHOW_SHOP_FREE_PETS_LABELS = import.meta.env.VITE_SHOW_SHOP_FREE_PETS_LABELS === 'true'
+
 export const OBBY = {
   x: 23,
   signZ: -4.2,
   pads: [
-    { z: -1, name: 'Impossible Bridge', color: '#e04cf0' },
-    { z: 3, name: 'Stud Jumps', color: '#ffae2b' },
-    { z: 7, name: 'Tsunami Escape', color: '#35d0ff' },
+    { z: -1, name: 'Impossible Bridge', color: '#e04cf0', minCoins: BRIDGE_REWARD_COINS },
+    { z: 3, name: 'Stud Jumps', color: '#ffae2b', minCoins: STUD_JUMPS_MIN_REWARD },
+    { z: 7, name: 'Tsunami Escape', color: '#35d0ff', minCoins: TSUNAMI_REWARD_COINS },
   ],
 }
 
+// `stat` is the store/useGameStore.js field each board ranks by — also what
+// systems/net.js's getLeaderboard(stat, limit) reads. components/
+// IslandLandmarks.jsx's Leaderboard component polls that live, merged
+// (online + all-time-saved) ranking instead of a fixed roster; offline/solo
+// (or before a game server is configured) it degrades to just the local
+// player's own row, same "never blocks, never intrudes" stance as the rest
+// of the netcode.
 export const LEADERBOARDS = [
-  { x: -2.8, z: 13.5, title: 'Top Coins', color: '#ffd23d' },
-  { x: 2.8, z: 13.5, title: 'Top Age', color: '#4fd8ff' },
+  { x: -2.8, z: 13.5, title: 'Top Coins', color: '#ffd23d', stat: 'coins' },
+  { x: 2.8, z: 13.5, title: 'Top Age', color: '#4fd8ff', stat: 'speed' },
 ]
 
 export const TRAMPOLINE = { x: -20, z: 8, radius: 1.6 }
@@ -86,6 +129,12 @@ function buildEdge() {
   return chunks
 }
 export const EDGE = buildEdge()
+
+// Every rect the grass top actually covers — the walkable island footprint.
+// Shared by Island.jsx (what it renders) and terrainHeight.js (what the
+// player can stand on): past this, there's no ground, only open air down to
+// the water.
+export const GRASS_RECTS = [CORE, ...EDGE.filter((c) => c.grass).map((c) => c.grass)]
 
 const DECOR_BOUNDS = Math.min(HALF_W, HALF_D) - 1.5
 const BLOCKED = [

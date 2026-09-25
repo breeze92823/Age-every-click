@@ -17,11 +17,11 @@ const TREE_TIERS = [
   [1.25, 0.8],
   [0.55, 0.45],
 ]
-const TRUNK = '#8a5a32'
-const LEAVES_LIGHT = ['#72d43f', '#66c838']
-const LEAVES_DARK = ['#3f9e36', '#378f2f']
-const BUSH = ['#86dc4c', '#79cf43']
-const ROCK = ['#a3a7b0', '#8e929b']
+const TRUNK = '#7e5230'
+const LEAVES_LIGHT = ['#65b83a', '#5aae33']
+const LEAVES_DARK = ['#398930', '#317b29']
+const BUSH = ['#78c944', '#6cbd3c']
+const ROCK = ['#989ba4', '#84888f']
 const PETALS = ['#ff4d4d', '#4d8bff', '#ffd23d', '#ffffff', '#ff7ad9']
 const STEM = '#4f9e2c'
 
