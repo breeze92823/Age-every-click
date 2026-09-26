@@ -45,6 +45,14 @@ import {
   WALL_BREAK_SYNTH_NOISE_FILTER_START_HZ,
   WALL_BREAK_SYNTH_NOISE_FILTER_END_HZ,
   WALL_BREAK_SYNTH_NOISE_GAIN,
+  WHEEL_TICK_GAIN,
+  WHEEL_TICK_SYNTH_FREQ_START_HZ,
+  WHEEL_TICK_SYNTH_FREQ_END_HZ,
+  WHEEL_TICK_SYNTH_ATTACK_S,
+  WHEEL_TICK_SYNTH_DECAY_S,
+  WHEEL_TICK_SYNTH_NOISE_GAIN,
+  WHEEL_TICK_SYNTH_NOISE_DECAY_S,
+  WHEEL_TICK_PITCH_JITTER,
 } from '../data/sfx.js'
 
 const bufferCache = new Map() // url -> Promise<AudioBuffer|null>
@@ -81,6 +89,7 @@ export function preload() {
   synthesizeButtonHoverBuffer(ctx)
   synthesizeActionFailBuffer(ctx)
   synthesizeWallBreakBuffer(ctx)
+  synthesizeWheelTickBuffer(ctx)
 }
 
 // Fire-and-forget: reuses the one decoded buffer, playing a fresh source
@@ -470,6 +479,79 @@ export function playWallBreak() {
     source.buffer = buffer
     const gain = ctx.createGain()
     gain.gain.value = WALL_BREAK_GAIN
+    source.connect(gain)
+    gain.connect(getMasterBus())
+    source.start(0)
+  })
+}
+
+// Renders the Lucky Wheel flapper tick once via OfflineAudioContext and
+// caches it — a triangle blip falling from WHEEL_TICK_SYNTH_FREQ_START_HZ to
+// _END_HZ under a near-instant attack and fast decay, layered with a very
+// short bandpassed noise snap for the plastic "clack".
+let wheelTickBufferPromise = null
+
+function synthesizeWheelTickBuffer(ctx) {
+  if (!wheelTickBufferPromise) {
+    const toneEnd = WHEEL_TICK_SYNTH_ATTACK_S + WHEEL_TICK_SYNTH_DECAY_S
+    const totalS = Math.max(toneEnd, WHEEL_TICK_SYNTH_NOISE_DECAY_S) + 0.02
+    const sampleRate = ctx.sampleRate
+    const offline = new OfflineAudioContext(1, Math.ceil(totalS * sampleRate), sampleRate)
+
+    const osc = offline.createOscillator()
+    osc.type = 'triangle'
+    osc.frequency.setValueAtTime(WHEEL_TICK_SYNTH_FREQ_START_HZ, 0)
+    osc.frequency.exponentialRampToValueAtTime(WHEEL_TICK_SYNTH_FREQ_END_HZ, toneEnd)
+
+    const toneGain = offline.createGain()
+    toneGain.gain.setValueAtTime(0, 0)
+    toneGain.gain.linearRampToValueAtTime(1, WHEEL_TICK_SYNTH_ATTACK_S)
+    toneGain.gain.exponentialRampToValueAtTime(0.001, toneEnd)
+
+    const noiseLength = Math.ceil(WHEEL_TICK_SYNTH_NOISE_DECAY_S * sampleRate)
+    const noiseBuffer = offline.createBuffer(1, noiseLength, sampleRate)
+    const noiseData = noiseBuffer.getChannelData(0)
+    for (let i = 0; i < noiseLength; i++) noiseData[i] = Math.random() * 2 - 1
+
+    const noiseSource = offline.createBufferSource()
+    noiseSource.buffer = noiseBuffer
+
+    const noiseFilter = offline.createBiquadFilter()
+    noiseFilter.type = 'bandpass'
+    noiseFilter.frequency.value = WHEEL_TICK_SYNTH_FREQ_START_HZ * 2
+    noiseFilter.Q.value = 2
+
+    const noiseGain = offline.createGain()
+    noiseGain.gain.setValueAtTime(WHEEL_TICK_SYNTH_NOISE_GAIN, 0)
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, WHEEL_TICK_SYNTH_NOISE_DECAY_S)
+
+    osc.connect(toneGain)
+    toneGain.connect(offline.destination)
+    noiseSource.connect(noiseFilter)
+    noiseFilter.connect(noiseGain)
+    noiseGain.connect(offline.destination)
+
+    osc.start(0)
+    osc.stop(toneEnd + 0.02)
+    noiseSource.start(0)
+
+    wheelTickBufferPromise = offline.startRendering()
+  }
+  return wheelTickBufferPromise
+}
+
+// Fire-and-forget one-shot for a slice boundary passing the Lucky Wheel's
+// pointer, with a small random pitch wobble per tick.
+export function playWheelTick() {
+  const ctx = unlock()
+  if (!ctx) return
+  synthesizeWheelTickBuffer(ctx).then((buffer) => {
+    if (!buffer) return
+    const source = ctx.createBufferSource()
+    source.buffer = buffer
+    source.playbackRate.value = 1 + (Math.random() * 2 - 1) * WHEEL_TICK_PITCH_JITTER
+    const gain = ctx.createGain()
+    gain.gain.value = WHEEL_TICK_GAIN
     source.connect(gain)
     gain.connect(getMasterBus())
     source.start(0)

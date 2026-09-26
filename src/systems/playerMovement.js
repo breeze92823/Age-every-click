@@ -10,6 +10,7 @@ import { resolveLandmarkCollision } from './landmarkCollision.js'
 import { resolveArea2Walls } from './area2.js'
 import { checkScenePortal } from './scenePortals.js'
 import { checkStatueInteract, syncStatueInteractHeld } from './statueInteract.js'
+import { checkShopInteract, syncShopInteractHeld } from './shopInteract.js'
 import { bonusGroundAt, stepBonusBridge, resetBonusBridge } from './bonusBridge.js'
 import { studJumpsGroundAt, resolveStudJumpsWalls, stepStudJumps } from './studJumps.js'
 import { tsunamiGroundAt, resolveTsunamiWalls, stepTsunami, resetTsunami } from './tsunamiScene.js'
@@ -64,6 +65,7 @@ export function step(dt) {
   const { ridingAgeMachine, wheelOpen, gender } = useGameStore.getState()
   if (ridingAgeMachine != null || wheelOpen || gender == null) {
     syncStatueInteractHeld(inputState.interactHeld)
+    syncShopInteractHeld(inputState.interactHeld)
     player.velocity.x = 0
     player.velocity.y = 0
     player.velocity.z = 0
@@ -197,8 +199,14 @@ export function step(dt) {
   // stays collide-triggered) swaps which environment is mounted and
   // re-spawns the player there — see scenePortals.js.
   const portal = checkScenePortal(p.x, p.z, currentScene, inputState.interactHeld, dt)
-  if (onIsland) checkStatueInteract(p.x, p.z, inputState.interactHeld)
-  else syncStatueInteractHeld(inputState.interactHeld)
+  if (onIsland && checkShopInteract(p.x, p.z, inputState.interactHeld)) {
+    syncStatueInteractHeld(inputState.interactHeld)
+  } else if (onIsland) {
+    checkStatueInteract(p.x, p.z, inputState.interactHeld)
+  } else {
+    syncShopInteractHeld(inputState.interactHeld)
+    syncStatueInteractHeld(inputState.interactHeld)
+  }
   if (portal) {
     if (portal.scene === 'bonus') resetBonusBridge()
     if (portal.scene === 'tsunami') resetTsunami()

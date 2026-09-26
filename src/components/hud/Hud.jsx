@@ -398,7 +398,18 @@ function LeftCenterControls() {
   const rebirth = useGameStore((s) => s.rebirth)
   const canRebirth = useGameStore((s) => canAcceptRebirth(s.level, s.rebirth))
   const acceptRebirth = useGameStore((s) => s.acceptRebirth)
-  const [openWindow, setOpenWindow] = useState(null) // null | 'rebirth' | 'shop'
+  const [rebirthOpen, setRebirthOpen] = useState(false)
+  // Shop lives in the store so the stall's E interaction (systems/
+  // shopInteract.js) can open it too, and the stall can animate off it.
+  const shopOpen = useGameStore((s) => s.shopOpen)
+  const openShop = useGameStore((s) => s.openShop)
+  const closeShop = useGameStore((s) => s.closeShop)
+  const openWindow = shopOpen ? 'shop' : rebirthOpen ? 'rebirth' : null
+  const setOpenWindow = (w) => {
+    setRebirthOpen(w === 'rebirth')
+    if (w === 'shop') openShop()
+    else closeShop()
+  }
   const isTouch = useTouchMode()
 
   const modal = {

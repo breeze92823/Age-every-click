@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Color, DoubleSide, ExtrudeGeometry, MeshStandardMaterial, Object3D, Path, Shape, ShapeGeometry, SphereGeometry, Vector2 } from 'three'
+import { BoxGeometry, Color, DoubleSide, ExtrudeGeometry, MeshStandardMaterial, Object3D, Path, Shape, ShapeGeometry, SphereGeometry, Vector2 } from 'three'
 import { MATERIAL_PBR } from '../data/materials.js'
 import { GROUND_Y, ISLAND_SCALE } from '../data/world.js'
 import { ageMachineSpot } from '../data/area2.js'
@@ -33,7 +33,7 @@ import {
   makeGlassGridTexture,
   makeLavaTexture,
 } from '../systems/canvasTextures.js'
-import { makeStudTexture, shade } from '../systems/studTexture.js'
+import { makeStudTexture, makeTileTexture, setBoxUVsInTiles, shade } from '../systems/studTexture.js'
 import { formatCompact } from '../systems/format.js'
 import { formatShort } from '../data/format.js'
 import { useGameStore } from '../store/useGameStore.js'
@@ -374,37 +374,256 @@ function SignBoard() {
   )
 }
 
+// Shop stall, after the Roblox-style reference: chunky tiled wood frame,
+// blocky red/white awning with a hanging valance, a shopkeeper behind the
+// counter, and a blue treasure chest + coin stacks out front. E nearby
+// (systems/shopInteract.js) opens the Shop popup via the store's shopOpen;
+// on that, the stall squash-pops, the chest lid swings open (and stays open
+// until the popup closes), coins burst out of it, and the keeper waves.
+const SHOP_TILES_PER_METRE = 3
+const SHOP_WOOD = '#b0602f'
+const SHOP_WOOD_DARK = '#8a4622'
+const SHOP_RED = '#e8231f'
+const SHOP_WHITE = '#f4f4f7'
+const CHEST_BLUE = '#2fb4ef'
+const GOLD = '#ffc21a'
+const SHOP_LABEL_GRADIENT = ['#ffe23d', '#ffb21a', '#ff8a12']
+const SHOP_AWNING_STRIPES = 6
+const SHOP_AWNING_WIDTH = 4
+const CHEST_LID_OPEN = -1.9 // rad about the back hinge
+const AWNING_TILT = 0.18
+// Per burst coin: sideways drift and launch speed (m/s-ish, scaled below).
+const COIN_BURST = [
+  [-0.5, 1.2],
+  [0.3, 1.5],
+  [0.7, 1.1],
+  [-0.2, 1.7],
+  [0.1, 1.3],
+]
+const COIN_BURST_TIME = 0.9
+
+function TileBox({ size, position, rotation, map, cast = true }) {
+  const [w, h, d] = size
+  const geometry = useMemo(() => setBoxUVsInTiles(new BoxGeometry(w, h, d), [w, h, d], SHOP_TILES_PER_METRE), [w, h, d])
+  useEffect(() => () => geometry.dispose(), [geometry])
+  return (
+    <mesh geometry={geometry} position={position} rotation={rotation} castShadow={cast} receiveShadow>
+      <Mat color="#ffffff" map={map} />
+    </mesh>
+  )
+}
+
+function GoldCoin({ position, rotation }) {
+  return (
+    <mesh position={position} rotation={rotation} castShadow>
+      <cylinderGeometry args={[0.2, 0.2, 0.07, 8]} />
+      <Mat color={GOLD} emissive="#ff9d00" emissiveIntensity={0.25} metalness={0.3} roughness={0.4} />
+    </mesh>
+  )
+}
+
+function Shopkeeper({ bodyRef, waveArmRef }) {
+  return (
+    <group ref={bodyRef} position={[0, 0.9, -0.35]}>
+      {/* torso + tie + gold chain */}
+      <Box size={[0.7, 0.75, 0.38]} position={[0, 0.38, 0]} color="#16171b" />
+      <Box size={[0.2, 0.55, 0.02]} position={[0, 0.45, 0.2]} color="#1f5fd6" cast={false} />
+      <mesh position={[0, 0.66, 0.16]} rotation-x={1.2}>
+        <torusGeometry args={[0.2, 0.035, 6, 16]} />
+        <Mat color={GOLD} metalness={0.4} roughness={0.35} />
+      </mesh>
+      {/* head, hair, shades, mouth */}
+      <Box size={[0.42, 0.42, 0.42]} position={[0, 0.98, 0]} color="#f7f7f7" />
+      <Box size={[0.5, 0.16, 0.5]} position={[0, 1.23, -0.02]} color="#d9611c" />
+      <Box size={[0.5, 0.3, 0.14]} position={[0, 1.0, -0.23]} color="#d9611c" />
+      <Box size={[0.14, 0.34, 0.46]} position={[-0.24, 1.07, -0.03]} color="#d9611c" />
+      <Box size={[0.14, 0.34, 0.46]} position={[0.24, 1.07, -0.03]} color="#d9611c" />
+      <Box size={[0.4, 0.09, 0.03]} position={[0, 1.02, 0.22]} color="#0c0c0e" cast={false} />
+      <Box size={[0.14, 0.03, 0.02]} position={[0, 0.86, 0.215]} color="#3a3a3a" cast={false} />
+      {/* arm resting on the counter */}
+      <Box size={[0.2, 0.2, 0.6]} position={[-0.42, 0.34, 0.5]} color="#16171b" />
+      <Box size={[0.2, 0.18, 0.18]} position={[-0.42, 0.34, 0.86]} color="#f7f7f7" />
+      {/* waving arm, pivoted at the shoulder */}
+      <group ref={waveArmRef} position={[0.45, 0.68, 0]}>
+        <Box size={[0.2, 0.6, 0.22]} position={[0, -0.3, 0]} color="#16171b" />
+        <Box size={[0.2, 0.16, 0.2]} position={[0, -0.66, 0]} color="#f7f7f7" />
+      </group>
+    </group>
+  )
+}
+
+function TreasureChest({ lidRef }) {
+  return (
+    <group>
+      <Box size={[1, 0.55, 0.7]} position={[0, 0.275, 0]} color={CHEST_BLUE} />
+      {/* gold bands and corner trims */}
+      <Box size={[1.04, 0.1, 0.74]} position={[0, 0.05, 0]} color={GOLD} />
+      <Box size={[1.04, 0.08, 0.74]} position={[0, 0.52, 0]} color={GOLD} />
+      {[-0.46, 0.46].map((x) => (
+        <Box key={x} size={[0.12, 0.56, 0.76]} position={[x, 0.28, 0]} color={GOLD} />
+      ))}
+      <Box size={[0.16, 0.2, 0.06]} position={[0, 0.44, 0.37]} color={GOLD} />
+      <Box size={[0.05, 0.1, 0.02]} position={[0, 0.43, 0.405]} color="#4a1d0c" cast={false} />
+      {/* lid, hinged along the back top edge */}
+      <group ref={lidRef} position={[0, 0.56, -0.35]}>
+        <Box size={[1, 0.28, 0.7]} position={[0, 0.14, 0.35]} color={CHEST_BLUE} />
+        <Box size={[1.04, 0.08, 0.74]} position={[0, 0.3, 0.35]} color={GOLD} />
+        {[-0.46, 0.46].map((x) => (
+          <Box key={x} size={[0.12, 0.34, 0.76]} position={[x, 0.15, 0.35]} color={GOLD} />
+        ))}
+        <Box size={[0.16, 0.14, 0.06]} position={[0, 0.07, 0.72]} color={GOLD} />
+      </group>
+      {/* glowing gold pile, seen once the lid lifts */}
+      <mesh position={[0, 0.5, 0]}>
+        <boxGeometry args={[0.8, 0.08, 0.5]} />
+        <meshStandardMaterial color={GOLD} emissive="#ffb300" emissiveIntensity={0.8} {...MATERIAL_PBR.PROP} />
+      </mesh>
+    </group>
+  )
+}
+
 function Shop() {
-  const stripes = 6
-  const awningWidth = 3.8
-  const stripeWidth = awningWidth / stripes
+  const woodMap = useMemo(() => makeTileTexture(SHOP_WOOD), [])
+  const woodDarkMap = useMemo(() => makeTileTexture(SHOP_WOOD_DARK), [])
+  const redMap = useMemo(() => makeTileTexture(SHOP_RED), [])
+  const whiteMap = useMemo(() => makeTileTexture(SHOP_WHITE), [])
+  useEffect(
+    () => () => [woodMap, woodDarkMap, redMap, whiteMap].forEach((t) => t.dispose()),
+    [woodMap, woodDarkMap, redMap, whiteMap],
+  )
+
+  const rootRef = useRef(null)
+  const awningRef = useRef(null)
+  const lidRef = useRef(null)
+  const keeperRef = useRef(null)
+  const waveArmRef = useRef(null)
+  const counterCoinRef = useRef(null)
+  const burstRefs = useRef([])
+  // sinceOpen: seconds since the popup last opened (Infinity = never, so the
+  // one-shot pop/burst stay idle). lid/arm: eased 0..target blend values.
+  const anim = useRef({ wasOpen: false, sinceOpen: Infinity, lid: 0, arm: 0 })
+
+  useFrame(({ clock }, dt) => {
+    const a = anim.current
+    const open = useGameStore.getState().shopOpen
+    if (open && !a.wasOpen) a.sinceOpen = 0
+    a.wasOpen = open
+    a.sinceOpen += dt
+    const t = a.sinceOpen
+    const time = clock.elapsedTime
+    const fresh = Number.isFinite(t)
+
+    // Squash-pop of the whole stall, and a trailing wobble on the awning.
+    const pop = fresh ? 0.07 * Math.sin(t * 16) * Math.exp(-t * 5) : 0
+    rootRef.current?.scale.set(1 + pop, 1 - pop, 1 + pop)
+    if (awningRef.current) {
+      const wob = fresh ? 0.12 * Math.sin(t * 11 - 0.6) * Math.exp(-t * 3.5) : 0
+      awningRef.current.rotation.x = AWNING_TILT + wob
+    }
+
+    // Chest lid eases open while the popup is up, then drops shut.
+    const k = 1 - Math.exp(-dt * (open ? 9 : 6))
+    a.lid += ((open ? CHEST_LID_OPEN : 0) - a.lid) * k
+    if (lidRef.current) lidRef.current.rotation.x = a.lid
+
+    // Keeper idles with a small bob and look-around; hops and waves on open.
+    a.arm += ((open ? 1 : 0) - a.arm) * k
+    if (keeperRef.current) {
+      const hop = fresh && t < 0.5 ? Math.sin(t * Math.PI * 2) * 0.12 : 0
+      keeperRef.current.position.y = 0.9 + Math.sin(time * 2.2) * 0.025 + Math.max(0, hop)
+      keeperRef.current.rotation.y = Math.sin(time * 0.7) * 0.12 * (1 - a.arm)
+    }
+    if (waveArmRef.current) waveArmRef.current.rotation.z = a.arm * (2.6 + Math.sin(time * 9) * 0.35)
+
+    if (counterCoinRef.current) {
+      counterCoinRef.current.rotation.y = time * 2
+      counterCoinRef.current.position.y = 1.32 + Math.sin(time * 3) * 0.04
+    }
+
+    // Coins arc up out of the chest and fall back in, once per open.
+    burstRefs.current.forEach((coin, i) => {
+      if (!coin) return
+      const ct = t - i * 0.06
+      const active = ct > 0 && ct < COIN_BURST_TIME
+      coin.visible = active
+      if (!active) return
+      const [dx, vy] = COIN_BURST[i]
+      const p = ct / COIN_BURST_TIME
+      coin.position.set(dx * p, 0.5 + vy * 2.2 * ct - 5.5 * ct * ct, 0.25 * p)
+      coin.rotation.set(ct * 9, ct * 6, 0)
+    })
+  })
+
+  const stripeWidth = SHOP_AWNING_WIDTH / SHOP_AWNING_STRIPES
+  const stripeMap = (i) => (i % 2 ? whiteMap : redMap)
+
   return (
     <group position={[SHOP.x, GROUND_Y, SHOP.z]} rotation-y={Math.PI}>
-      <Box size={[3.4, 2.6, 0.2]} position={[0, 1.3, -0.9]} color="#c98a4b" />
-      <Box size={[3.4, 1, 1.2]} position={[0, 0.5, 0.6]} color="#b5703a" />
-      <Box size={[3.6, 0.12, 1.4]} position={[0, 1.06, 0.6]} color={WOOD_DARK} />
-      {[
-        [-1.6, -0.8],
-        [1.6, -0.8],
-        [-1.6, 1.2],
-        [1.6, 1.2],
-      ].map(([x, z]) => (
-        <mesh key={`${x},${z}`} position={[x, 1.4, z]} castShadow>
-          <cylinderGeometry args={[0.09, 0.09, 2.8, 8]} />
-          <Mat color="#f2f2f2" />
-        </mesh>
-      ))}
-      <group position={[0, 2.95, 0.2]} rotation-x={0.2}>
-        {Array.from({ length: stripes }, (_, i) => (
-          <Box
-            key={i}
-            size={[stripeWidth, 0.14, 2.6]}
-            position={[(i - (stripes - 1) / 2) * stripeWidth, 0, 0]}
-            color={i % 2 ? '#ffffff' : '#e53935'}
-          />
+      <group ref={rootRef}>
+        {/* posts */}
+        {[
+          [-1.65, -0.85],
+          [1.65, -0.85],
+          [-1.65, 0.95],
+          [1.65, 0.95],
+        ].map(([x, z]) => (
+          <TileBox key={`${x},${z}`} size={[0.36, 2.9, 0.36]} position={[x, 1.45, z]} map={woodMap} />
         ))}
+        {/* top frame */}
+        <TileBox size={[3.7, 0.34, 0.34]} position={[0, 2.75, 0.95]} map={woodDarkMap} />
+        <TileBox size={[3.7, 0.34, 0.34]} position={[0, 2.75, -0.85]} map={woodDarkMap} />
+        <TileBox size={[0.34, 0.34, 1.5]} position={[-1.65, 2.75, 0.05]} map={woodDarkMap} />
+        <TileBox size={[0.34, 0.34, 1.5]} position={[1.65, 2.75, 0.05]} map={woodDarkMap} />
+        {/* risers lifting the awning's back edge for its slope */}
+        <TileBox size={[0.36, 0.36, 0.36]} position={[-1.65, 3.1, -0.85]} map={woodMap} />
+        <TileBox size={[0.36, 0.36, 0.36]} position={[1.65, 3.1, -0.85]} map={woodMap} />
+        {/* low back wall + back shelf */}
+        <TileBox size={[2.94, 1.3, 0.2]} position={[0, 0.65, -0.85]} map={woodMap} />
+        <TileBox size={[2.94, 0.12, 0.4]} position={[0, 1.36, -0.75]} map={woodDarkMap} />
+        {/* counter */}
+        <TileBox size={[3.0, 1.0, 0.55]} position={[0, 0.5, 0.75]} map={woodMap} />
+        <TileBox size={[3.4, 0.14, 0.8]} position={[0, 1.07, 0.75]} map={woodDarkMap} />
+
+        <Shopkeeper bodyRef={keeperRef} waveArmRef={waveArmRef} />
+
+        {/* coins on the counter: a small stack plus one spinning on display */}
+        <GoldCoin position={[0.95, 1.18, 0.75]} />
+        <GoldCoin position={[0.97, 1.25, 0.73]} rotation={[0, 0.3, 0]} />
+        <GoldCoin position={[1.15, 1.18, 0.9]} rotation={[0, 0.5, 0]} />
+        <group ref={counterCoinRef} position={[0.55, 1.32, 0.8]}>
+          <GoldCoin rotation={[Math.PI / 2, 0, 0]} />
+        </group>
+
+        {/* awning: blocky red/white stripes sloping toward the front, and a
+            valance of alternating flaps hanging off its front edge */}
+        <group ref={awningRef} position={[0, 3.4, -0.9]} rotation-x={AWNING_TILT}>
+          {Array.from({ length: SHOP_AWNING_STRIPES }, (_, i) => {
+            const x = (i - (SHOP_AWNING_STRIPES - 1) / 2) * stripeWidth
+            return (
+              <group key={i}>
+                <TileBox size={[stripeWidth, 0.3, 2.4]} position={[x, 0, 1.2]} map={stripeMap(i)} />
+                <TileBox size={[stripeWidth, 0.5, 0.3]} position={[x, -0.25, 2.4]} map={stripeMap(i)} />
+              </group>
+            )
+          })}
+        </group>
+
+        {/* treasure chest out front, coins spilling beside it */}
+        <group position={[-0.85, 0, 1.55]} rotation-y={0.2}>
+          <TreasureChest lidRef={lidRef} />
+          {COIN_BURST.map((_, i) => (
+            <group key={i} ref={(el) => (burstRefs.current[i] = el)} visible={false}>
+              <GoldCoin />
+            </group>
+          ))}
+        </group>
+        <GoldCoin position={[0.1, 0.035, 1.6]} />
+        <GoldCoin position={[0.12, 0.105, 1.58]} rotation={[0, 0.4, 0]} />
+        <GoldCoin position={[0.08, 0.175, 1.61]} rotation={[0, 0.8, 0]} />
+        <GoldCoin position={[0.5, 0.035, 1.75]} rotation={[0, 0.2, 0]} />
+        <GoldCoin position={[0.35, 0.09, 1.3]} rotation={[0.5, 0, 0.3]} />
       </group>
-      {SHOW_SHOP_FREE_PETS_LABELS && <Label text="SHOP" color="#ffd23d" position={[0, 4.1, 0]} height={1} />}
+      <Label text="SHOP" color="#ffd23d" gradient={SHOP_LABEL_GRADIENT} position={[0, 4.4, 0]} height={1.1} />
     </group>
   )
 }

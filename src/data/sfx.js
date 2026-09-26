@@ -75,3 +75,20 @@ export const WALL_BREAK_SYNTH_NOISE_DECAY_S = 0.4
 export const WALL_BREAK_SYNTH_NOISE_FILTER_START_HZ = 3500
 export const WALL_BREAK_SYNTH_NOISE_FILTER_END_HZ = 250
 export const WALL_BREAK_SYNTH_NOISE_GAIN = 0.9
+
+// Lucky Wheel flapper tick, fired each time a slice boundary passes the
+// pointer mid-spin (components/hud/LuckyWheel.jsx), so the ticks slow down
+// with the wheel. No real file dropped yet, so playWheelTick() synthesizes a
+// short plastic "clack": a falling triangle blip over a bandpassed noise
+// snap. Each play gets a small random pitch wobble so a run of ticks doesn't
+// sound machine-gun identical.
+export const WHEEL_TICK_SOUND_URL = '/audio/wheel_tick.mp3'
+export const WHEEL_TICK_GAIN = 0.16
+
+export const WHEEL_TICK_SYNTH_FREQ_START_HZ = 1900
+export const WHEEL_TICK_SYNTH_FREQ_END_HZ = 900
+export const WHEEL_TICK_SYNTH_ATTACK_S = 0.001
+export const WHEEL_TICK_SYNTH_DECAY_S = 0.035
+export const WHEEL_TICK_SYNTH_NOISE_GAIN = 0.5
+export const WHEEL_TICK_SYNTH_NOISE_DECAY_S = 0.015
+export const WHEEL_TICK_PITCH_JITTER = 0.06
