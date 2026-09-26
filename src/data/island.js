@@ -126,9 +126,9 @@ export const STATUE = { x: 3, z: 1, yaw: 0.1 + Math.PI }
 export const WIN_SIGN = { x: 7.7, z: -1.7, y: 1.9, poleDx: [-0.3, 1.1], scale: 1.5, yaw: Math.PI / 4 }
 export const PETS = { x: 19.5, z: -25 }
 
-// Temporarily hidden (not yet content-ready) — the "FREE"/"SHOP"/"PETS"
-// billboard labels above those landmarks only render when explicitly opted
-// into via .env. The models themselves (and their collision) stay as-is.
+// Temporarily hidden (not yet content-ready) — the "FREE"/"PETS" billboard
+// labels above those landmarks only render when explicitly opted into via
+// .env. (The Shop's own "SHOP" label now always shows — it's interactive.) The models themselves (and their collision) stay as-is.
 // See .env.example.
 export const SHOW_SHOP_FREE_PETS_LABELS = import.meta.env.VITE_SHOW_SHOP_FREE_PETS_LABELS === 'true'
 

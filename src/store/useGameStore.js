@@ -94,6 +94,12 @@ export const useGameStore = create((set, get) => ({
   wheelOpen: false,
   ageBoostUntil: 0,
 
+  // Shop popup (components/hud/Hud.jsx's ShopWindow), opened from the HUD's
+  // Shop button or with E at the Shop stall (systems/shopInteract.js).
+  // Transient. IslandLandmarks.jsx's Shop animates off it (chest lid,
+  // shopkeeper wave).
+  shopOpen: false,
+
   // 'boy' | 'girl' | null. Chosen in components/hud/GenderPicker.jsx at the
   // start of every session; null means "not asked yet" and freezes the player.
   // Deliberately transient: not in net.js's progressPayload(), resetProgress
@@ -110,6 +116,14 @@ export const useGameStore = create((set, get) => ({
 
   closeWheel() {
     set({ wheelOpen: false })
+  },
+
+  openShop() {
+    set({ shopOpen: true })
+  },
+
+  closeShop() {
+    set({ shopOpen: false })
   },
 
   // Called from components/hud/LuckyWheel.jsx's coins "+1 Spins" button.

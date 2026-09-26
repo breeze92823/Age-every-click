@@ -4,7 +4,7 @@ import { useGameStore } from '../../store/useGameStore.js'
 import { WHEEL_PRIZES, SLICE_LINES, SPIN_PRICE_COINS } from '../../data/luckyWheel.js'
 import { formatCompact } from '../../systems/format.js'
 import { requestFreeSpin } from '../../systems/net.js'
-import { playButtonClick, playButtonHover, playLevelUp, playActionFail } from '../../systems/sfx.js'
+import { playButtonClick, playButtonHover, playLevelUp, playActionFail, playWheelTick } from '../../systems/sfx.js'
 
 // Lucky Wheel popup, opened with E at the Statue (systems/statueInteract.js
 // -> the store's openWheel). Five equal slices laid out clockwise from the
@@ -117,6 +117,37 @@ function formatCountdown(ms) {
   return `${h}:${m}:${s}`
 }
 
+// The face's current on-screen angle (degrees, -180..180] read off the
+// mid-transition computed transform, so ticks follow the real easing.
+function readAngle(el) {
+  const m = getComputedStyle(el).transform
+  if (!m || m === 'none') return 0
+  const [a, b] = m.slice(m.indexOf('(') + 1, -1).split(',').map(Number)
+  return (Math.atan2(b, a) * 180) / Math.PI
+}
+
+// Plays a flapper tick every time a slice boundary passes the pointer while
+// `spinning`, by sampling the face's live angle each frame.
+function useWheelTicks(faceRef, spinning) {
+  useEffect(() => {
+    const el = faceRef.current
+    if (!spinning || !el) return
+    // Boundaries sit half a slice either side of each slice's centre.
+    const boundary = (deg) => Math.floor((deg - SLICE_DEG / 2) / SLICE_DEG)
+    let last = readAngle(el)
+    let unwrapped = last // cumulative angle, free of the ±180 wrap
+    let frame = requestAnimationFrame(function step() {
+      const angle = readAngle(el)
+      const next = unwrapped + ((((angle - last) % 360) + 540) % 360) - 180
+      if (boundary(next) !== boundary(unwrapped)) playWheelTick()
+      last = angle
+      unwrapped = next
+      frame = requestAnimationFrame(step)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [faceRef, spinning])
+}
+
 function WheelWindow() {
   const spins = useGameStore((s) => s.spins)
   const freeSpinReadyAt = useGameStore((s) => s.freeSpinReadyAt)
@@ -128,6 +159,8 @@ function WheelWindow() {
   const [message, setMessage] = useState(null) // { text, ok }
   const rotationRef = useRef(0)
   const timerRef = useRef(0)
+  const faceRef = useRef(null)
+  useWheelTicks(faceRef, spinning)
 
   const close = () => {
     if (spinning) return
@@ -240,6 +273,7 @@ function WheelWindow() {
 
         <div className="relative mt-[0.9em] aspect-square w-[88%]">
           <div
+            ref={faceRef}
             className="h-full w-full"
             style={{
               transform: `rotate(${rotation}deg)`,

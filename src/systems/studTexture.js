@@ -143,3 +143,61 @@ export function makeStudOverlayDataURL(pitch = 32) {
 
   return canvas.toDataURL('image/png')
 }
+
+// One raised square tile with a bevelled rim and a dark grout line — the
+// chunky "brick" look on the Shop stall's wood and awning. Pair with
+// setBoxUVsInTiles() so each tile lands one per `1 / tilesPerMetre` metres
+// on every face regardless of the box's proportions.
+export function makeTileTexture(base) {
+  const px = 128
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = px
+  const g = canvas.getContext('2d')
+  const grout = px * 0.05
+  const bevel = px * 0.1
+
+  g.fillStyle = shade(base, -0.35)
+  g.fillRect(0, 0, px, px)
+  g.fillStyle = base
+  g.fillRect(grout, grout, px - grout * 2, px - grout * 2)
+
+  const inner0 = grout + bevel
+  const inner1 = px - grout - bevel
+  // Bevel: lit top/left, shaded bottom/right, as trapezoids around the face.
+  const bevelSide = (points, fill) => {
+    g.fillStyle = fill
+    g.beginPath()
+    points.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)))
+    g.closePath()
+    g.fill()
+  }
+  const o0 = grout
+  const o1 = px - grout
+  bevelSide([[o0, o0], [o1, o0], [inner1, inner0], [inner0, inner0]], shade(base, 0.22))
+  bevelSide([[o0, o0], [inner0, inner0], [inner0, inner1], [o0, o1]], shade(base, 0.12))
+  bevelSide([[o0, o1], [inner0, inner1], [inner1, inner1], [o1, o1]], shade(base, -0.22))
+  bevelSide([[o1, o0], [o1, o1], [inner1, inner1], [inner1, inner0]], shade(base, -0.14))
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 8
+  return tex
+}
+
+// Rescales a BoxGeometry's per-face 0..1 UVs so a repeating texture tiles a
+// whole number of times per face, ~tilesPerMetre per metre along each edge.
+// BoxGeometry's faces run +x, -x, +y, -y, +z, -z, four verts each (one
+// segment), with (u, v) along (depth, height), (width, depth), (width,
+// height) respectively.
+export function setBoxUVsInTiles(geometry, [w, h, d], tilesPerMetre) {
+  const n = (len) => Math.max(1, Math.round(len * tilesPerMetre))
+  const faces = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]]
+  const uv = geometry.attributes.uv
+  for (let i = 0; i < uv.count; i++) {
+    const [fu, fv] = faces[Math.floor(i / 4)]
+    uv.setXY(i, uv.getX(i) * n(fu), uv.getY(i) * n(fv))
+  }
+  uv.needsUpdate = true
+  return geometry
+}
