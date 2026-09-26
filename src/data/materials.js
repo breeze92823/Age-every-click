@@ -8,6 +8,6 @@ export const MATERIAL_PBR = {
   DECOR: { roughness: 0.85, metalness: 0 },
   PROP: { roughness: 0.7, metalness: 0 },
   GLASS: { roughness: 0.05, metalness: 0 },
-  WATER: { roughness: 0.15, metalness: 0.1 },
+  WATER: { roughness: 0.35, metalness: 0 },
   PLAYER: { roughness: 0.7, metalness: 0 },
 }
