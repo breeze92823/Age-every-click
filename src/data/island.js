@@ -39,14 +39,67 @@ export const SPAWN_PAD = { x: SPAWN.x / ISLAND_SCALE, z: SPAWN.z / ISLAND_SCALE 
 // riding the machine — see useGameStore's tickAgeMachine); `rate` stays the
 // display string so the two can't drift, but is kept as-authored since
 // canvasTextures.js already renders it verbatim.
+//
+// Optional look fields (IslandLandmarks.jsx's AgeMachine): `blocky` paints
+// the body with studs and the glass with a raised square grid; `core` is the
+// glowing shape inside the glass ('pillar', 'tree' or 'sparkle'); `lava`
+// skins the body and side pole with glowing cracks; `knob` recolors the
+// cap's top knob; `labelColor` overrides the tier-name color.
 const AGE_MACHINE_TIERS = [
-  { name: 'Basic', rate: '+1 Age/s', ageRate: 1, color: '#eef1f6', price: 100 },
-  { name: 'Double', rate: '+2 Age/s', ageRate: 2, color: '#9096a1', price: 2000 },
-  { name: 'Gold', rate: '+3 Age/s', ageRate: 3, color: '#ffcb3d', price: 3500 },
-  { name: 'VIP', rate: '+4 Age/s', ageRate: 4, color: '#ff5b7f', price: 5000 },
-  { name: 'Diamond', rate: '+5 Age/s', ageRate: 5, color: '#5fc9ff', price: 6500 },
-  { name: 'Emerald', rate: '+6 Age/s', ageRate: 6, color: '#3ddb6a', price: 8000 },
-  { name: 'Molten', rate: '+7 Age/s', ageRate: 7, color: '#231710', emissive: '#ff5a1f', emissiveIntensity: 0.6, price: 9500 },
+  { name: 'Basic', rate: '+1 Age/s', ageRate: 1, color: '#5f5c68', labelColor: '#b9b4d8', blocky: true, price: 100 },
+  { name: 'Double', rate: '+2 Age/s', ageRate: 2, color: '#716e7a', labelColor: '#a9a6c4', blocky: true, price: 2000 },
+  {
+    name: 'Gold',
+    rate: '+3 Age/s',
+    ageRate: 3,
+    color: '#f7c525',
+    labelColor: '#ffc81f',
+    blocky: true,
+    core: { shape: 'pillar', color: '#ffd84a' },
+    price: 3500,
+  },
+  {
+    name: 'VIP',
+    rate: '+4 Age/s',
+    ageRate: 4,
+    color: '#f2b52c',
+    labelColor: '#ff5a1f',
+    knob: '#e3202c',
+    blocky: true,
+    core: { shape: 'pillar', color: '#e8313f' },
+    price: 5000,
+  },
+  {
+    name: 'Diamond',
+    rate: '+5 Age/s',
+    ageRate: 5,
+    color: '#2f86f0',
+    labelColor: '#2f8cff',
+    blocky: true,
+    core: { shape: 'pillar', color: '#4fb2ff' },
+    price: 6500,
+  },
+  {
+    name: 'Emerald',
+    rate: '+6 Age/s',
+    ageRate: 6,
+    color: '#2ccf3a',
+    labelColor: '#3ee02a',
+    blocky: true,
+    core: { shape: 'tree', color: '#6fe36a' },
+    price: 8000,
+  },
+  {
+    name: 'Molten',
+    rate: '+7 Age/s',
+    ageRate: 7,
+    color: '#231710',
+    emissive: '#ff5a1f',
+    emissiveIntensity: 0.6,
+    lava: true,
+    core: { shape: 'sparkle', color: '#fff4c8' },
+    price: 9500,
+  },
 ]
 
 export const AGE_MACHINES = {
@@ -64,7 +117,7 @@ export const AGE_MACHINES = {
 export const FREE_BOOTH = { x: -3, z: -20 }
 export const SIGN_BOARD = { x: 4, z: -20, yaw: -0.35 }
 export const SHOP = { x: -2.5, z: 1 }
-export const STATUE = { x: 5, z: 1, yaw: 0.1 + Math.PI }
+export const STATUE = { x: 3, z: 1, yaw: 0.1 + Math.PI }
 // Marquee "Win" arrow beside the Statue, pointing at it. (x, z) is the sign's
 // centre on the ground; `y` is the arrow's centre height, and `poleDx` are the
 // two support poles' offsets along X (also their collision spots). `y` and

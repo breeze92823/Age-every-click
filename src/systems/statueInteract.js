@@ -11,7 +11,7 @@ import { useGameStore } from '../store/useGameStore.js'
 // Local space (pre-ISLAND_SCALE), same convention as landmarkCollision.js.
 // Radius is past the statue's own 1.1 collision radius (landmarkCollision.js)
 // so the prompt shows a stride or two before the player is stopped by it.
-const PROMPT_RADIUS = 2.5
+const PROMPT_RADIUS = 5
 
 // Previous frame's E state, so only a fresh press (not E already held on the
 // way in, or held through closing the wheel) opens it. playerMovement.js
