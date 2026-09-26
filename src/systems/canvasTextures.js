@@ -326,3 +326,44 @@ export function makeChevronTexture({ color, background = null, count = 1 }) {
   texture.anisotropy = 4
   return texture
 }
+
+// Seamless sea-surface tile: a pale-blue base with short white ripple arcs.
+// Multiplied by the water material's colour, so the base only needs to be a
+// touch off-white for the ripples to read as highlights.
+export function makeWaterTexture() {
+  const size = 256
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = size
+  const g = canvas.getContext('2d')
+  g.fillStyle = '#d8ecff'
+  g.fillRect(0, 0, size, size)
+  g.lineCap = 'round'
+  // Deterministic scatter so every load draws the same sea.
+  let seed = 7
+  const rand = () => {
+    seed = (seed * 16807) % 2147483647
+    return seed / 2147483647
+  }
+  for (let i = 0; i < 26; i++) {
+    const x = rand() * size
+    const y = rand() * size
+    const r = 10 + rand() * 16
+    const a0 = rand() * Math.PI * 2
+    g.strokeStyle = `rgba(255,255,255,${0.5 + rand() * 0.4})`
+    g.lineWidth = 2.5 + rand() * 2
+    // Drawn once per wrapped copy so arcs crossing an edge tile seamlessly.
+    for (const ox of [-size, 0, size]) {
+      for (const oy of [-size, 0, size]) {
+        g.beginPath()
+        g.arc(x + ox, y + oy, r, a0, a0 + Math.PI * 0.6)
+        g.stroke()
+      }
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.anisotropy = 8
+  return texture
+}

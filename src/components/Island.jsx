@@ -35,9 +35,9 @@ function buildIsland() {
   const strips = ENCLOSURES.flatMap((r) => curbStrips(r, ENCLOSURE_BORDER))
   const curbTop = GROUND_Y + CURB_HEIGHT
 
-  const grassTexture = makeStudTexture({ light: '#7cc350', dark: '#74b849', repeatX: 1, repeatY: 1 })
-  const pathTexture = makeStudTexture({ light: '#cfd2d8', dark: '#c6c9d0', repeatX: 1, repeatY: 1 })
-  const chevronTexture = makeChevronTexture({ color: '#8d929c', background: '#484c55' })
+  const grassTexture = makeStudTexture({ light: '#86cf55', dark: '#6bb443', repeatX: 1, repeatY: 1 })
+  const pathTexture = makeStudTexture({ light: '#ebe4d2', dark: '#ded6c1', repeatX: 1, repeatY: 1 })
+  const chevronTexture = makeChevronTexture({ color: '#bcd6ff', background: '#3d5a8c' })
 
   const grassMaterial = new MeshStandardMaterial({ map: grassTexture, ...MATERIAL_PBR.ISLAND_TOP })
   const parts = [
@@ -50,12 +50,12 @@ function buildIsland() {
     },
     {
       geometry: merge(grassRects.map((r) => slab(r, GROUND_Y - GRASS_DEPTH, GROUND_Y - 0.005))),
-      material: new MeshStandardMaterial({ color: '#579c33', ...MATERIAL_PBR.ISLAND_SIDE }),
+      material: new MeshStandardMaterial({ color: '#4c9a2c', ...MATERIAL_PBR.ISLAND_SIDE }),
       castShadow: true,
     },
     {
       geometry: merge(sandRects.map((r) => slab(r, SAND_BOTTOM, GROUND_Y - GRASS_DEPTH))),
-      material: new MeshStandardMaterial({ color: '#d4bd82', ...MATERIAL_PBR.ISLAND_SIDE }),
+      material: new MeshStandardMaterial({ color: '#e8cd7a', ...MATERIAL_PBR.ISLAND_SIDE }),
     },
     {
       geometry: merge(PATHS.map((r) => flatRect(r, PATH_Y))),
@@ -63,7 +63,7 @@ function buildIsland() {
     },
     {
       geometry: merge(strips.map((s) => slab(s.rect, GROUND_Y, curbTop - 0.005))),
-      material: new MeshStandardMaterial({ color: '#3f434b', ...MATERIAL_PBR.PATH }),
+      material: new MeshStandardMaterial({ color: '#3a5078', ...MATERIAL_PBR.PATH }),
       castShadow: true,
     },
     {

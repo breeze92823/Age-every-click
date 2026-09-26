@@ -39,7 +39,7 @@ export function makeStudTexture({
   studShadow = true,
   plateBevel = true,
 }) {
-  const cellPx = 128 // px per checker cell in the source bitmap
+  const cellPx = 256 // px per checker cell in the source bitmap
   const canvas = document.createElement('canvas')
   canvas.width = canvas.height = cellPx * 2
   const g = canvas.getContext('2d')
@@ -54,10 +54,10 @@ export function makeStudTexture({
     g.fillStyle = base
     g.fillRect(x0, y0, cellPx, cellPx)
     if (plateBevel) {
-      g.fillStyle = shade(base, 0.1)
+      g.fillStyle = shade(base, 0.18)
       g.fillRect(x0, y0, cellPx, bevel)
       g.fillRect(x0, y0, bevel, cellPx)
-      g.fillStyle = shade(base, -0.14)
+      g.fillStyle = shade(base, -0.26)
       g.fillRect(x0, y0 + cellPx - bevel, cellPx, bevel)
       g.fillRect(x0 + cellPx - bevel, y0, bevel, cellPx)
     }
@@ -68,9 +68,9 @@ export function makeStudTexture({
         const y = y0 + (sy + 0.5) * pitch
         const r = pitch * 0.3
         if (studShadow) disc(g, x + pitch * 0.05, y + pitch * 0.08, r * 1.05, 'rgba(0,0,0,0.28)')
-        disc(g, x, y, r, shade(base, 0.05))
+        disc(g, x, y, r, shade(base, 0.1))
         g.lineWidth = pitch * 0.07
-        g.strokeStyle = 'rgba(255,255,255,0.45)'
+        g.strokeStyle = 'rgba(255,255,255,0.55)'
         g.beginPath()
         g.arc(x, y, r * 0.78, Math.PI, Math.PI * 1.55)
         g.stroke()
@@ -88,7 +88,7 @@ export function makeStudTexture({
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping
   tex.repeat.set(repeatX, repeatY)
   tex.colorSpace = THREE.SRGBColorSpace
-  tex.anisotropy = 4
+  tex.anisotropy = 8
   return tex
 }
 
