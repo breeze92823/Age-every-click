@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import { Color, DoubleSide, ExtrudeGeometry, MeshStandardMaterial, Object3D, Path, Shape, ShapeGeometry, SphereGeometry, Vector2 } from 'three'
 import { MATERIAL_PBR } from '../data/materials.js'
 import { GROUND_Y, ISLAND_SCALE } from '../data/world.js'
-import { AGE_MACHINES_TOP_Y } from '../systems/terrainHeight.js'
+import { ageMachineSpot } from '../data/area2.js'
 import { resetPlayer } from '../systems/playerState.js'
 import { getLastBounceAt } from '../systems/trampoline.js'
 import {
@@ -53,11 +53,11 @@ const WHEEL_COLORS = ['#ff5b7f', '#ffcb3d', '#3ddb6a', '#5fc9ff', '#e04cf0', '#f
 // banner can sit flush against its +Z (camera-facing) surface.
 const GLASS_RADIUS = 0.6
 
-function Mat({ color, ...props }) {
+export function Mat({ color, ...props }) {
   return <meshStandardMaterial color={color} {...MATERIAL_PBR.PROP} {...props} />
 }
 
-function Box({ size, position, rotation, color, cast = true, ...mat }) {
+export function Box({ size, position, rotation, color, cast = true, ...mat }) {
   return (
     <mesh position={position} rotation={rotation} castShadow={cast} receiveShadow>
       <boxGeometry args={size} />
@@ -68,7 +68,7 @@ function Box({ size, position, rotation, color, cast = true, ...mat }) {
 
 // World-sized billboard text that always faces the camera.
 // `gradient` should be a stable (module-level) array so the memo holds.
-function Label({ text, color, position, height = 0.8, gradient }) {
+export function Label({ text, color, position, height = 0.8, gradient }) {
   const { texture, aspect } = useMemo(() => makeLabelTexture(text, { color, gradient }), [text, color, gradient])
   useEffect(() => () => texture.dispose(), [texture])
   return (
@@ -125,7 +125,9 @@ function OwnedTag({ position }) {
 //
 // Once owned, "Use" teleports the player onto the machine's stand and locks
 // them there (see useGameStore's enterAgeMachine/ridingAgeMachine and
-// playerMovement.js's freeze) until they tap the Return button.
+// playerMovement.js's freeze) until they tap the Return button. `index` is
+// the store index (data/area2.js's ALL_AGE_MACHINE_TIERS), which also says
+// which stand to park the player on.
 function BuyButton({ index, owned, price, position }) {
   const buyAgeMachine = useGameStore((s) => s.buyAgeMachine)
   const enterAgeMachine = useGameStore((s) => s.enterAgeMachine)
@@ -141,7 +143,8 @@ function BuyButton({ index, owned, price, position }) {
         if (owned) {
           if (enterAgeMachine(index)) {
             playButtonClick()
-            resetPlayer({ x: position[0] * ISLAND_SCALE, y: AGE_MACHINES_TOP_Y + 1, z: AGE_MACHINES.z * ISLAND_SCALE })
+            const spot = ageMachineSpot(index)
+            resetPlayer({ x: spot.x * ISLAND_SCALE, y: spot.topY + 1, z: spot.z * ISLAND_SCALE })
           } else {
             playActionFail()
           }
@@ -168,7 +171,7 @@ function BuyButton({ index, owned, price, position }) {
   )
 }
 
-function AgeMachine({ x, color, emissive, emissiveIntensity }) {
+function AgeMachine({ x, color, emissive, emissiveIntensity, glass = '#dff3ff' }) {
   const domeEmissive = emissive ? emissiveIntensity : 0
   return (
     <group position={[x, 0.4, 0]}>
@@ -187,7 +190,7 @@ function AgeMachine({ x, color, emissive, emissiveIntensity }) {
       <mesh position-y={1.3}>
         <cylinderGeometry args={[GLASS_RADIUS, GLASS_RADIUS, 1.8, 20, 1, true]} />
         <meshStandardMaterial
-          color="#dff3ff"
+          color={glass}
           transparent
           opacity={0.3}
           depthWrite={false}
@@ -207,12 +210,15 @@ function AgeMachine({ x, color, emissive, emissiveIntensity }) {
   )
 }
 
-function AgeMachines() {
-  const { z, spacing, tiers, standDepth, standHeight } = AGE_MACHINES
+// One stand of machines. Defaults to the hub's; Area2.jsx passes its own
+// (data/area2.js's AREA2_AGE_MACHINES), whose `firstIndex` offsets each
+// machine's store index past the hub's.
+export function AgeMachines({ config = AGE_MACHINES }) {
+  const { x: standX = 0, z, spacing, tiers, standDepth, standHeight, firstIndex = 0 } = config
   const ownedAgeMachines = useGameStore((s) => s.ownedAgeMachines)
   const mid = (tiers.length - 1) / 2
   return (
-    <group position={[0, GROUND_Y, z]}>
+    <group position={[standX, GROUND_Y, z]}>
       <Box
         size={[tiers.length * spacing + 1, standHeight, standDepth]}
         position={[0, standHeight / 2, 0]}
@@ -220,11 +226,12 @@ function AgeMachines() {
       />
       {tiers.map((t, i) => {
         const x = (i - mid) * spacing
-        const owned = ownedAgeMachines.has(i)
+        const index = firstIndex + i
+        const owned = ownedAgeMachines.has(index)
         const purchasable = t.price != null || t.priceLabel != null
         return (
           <group key={t.name}>
-            <AgeMachine x={x} color={t.color} emissive={t.emissive} emissiveIntensity={t.emissiveIntensity} />
+            <AgeMachine x={x} color={t.color} emissive={t.emissive} emissiveIntensity={t.emissiveIntensity} glass={t.glass} />
             <TierLabel name={t.name} rate={t.rate} color={t.emissive ?? t.color} position={[x, 3.7, 0]} />
             {(purchasable || owned) && (
               <>
@@ -233,7 +240,7 @@ function AgeMachines() {
                 ) : (
                   <PriceTag text={t.priceLabel ?? formatCompact(t.price)} position={[x, 1.95, GLASS_RADIUS + 0.4]} />
                 )}
-                <BuyButton index={i} owned={owned} price={t.price} position={[x, 1.55, GLASS_RADIUS + 0.1]} />
+                <BuyButton index={index} owned={owned} price={t.price} position={[x, 1.55, GLASS_RADIUS + 0.1]} />
               </>
             )}
           </group>

@@ -9,10 +9,10 @@ import { formatCompact } from '../../systems/format.js'
 import { resetPlayer } from '../../systems/playerState.js'
 import { syncYawToPlayer } from '../../systems/cameraOrbit.js'
 import { SPAWN, SPAWN_FACING, ISLAND_SCALE } from '../../data/world.js'
-import { OBBY, AGE_MACHINES } from '../../data/island.js'
+import { OBBY } from '../../data/island.js'
+import { ageMachineSpot } from '../../data/area2.js'
 import { AGE_BOOST_MULTIPLIER } from '../../data/luckyWheel.js'
 import { AGE_MACHINE_RADIUS } from '../../systems/ageMachineCollision.js'
-import { AGE_MACHINES_TOP_Y } from '../../systems/terrainHeight.js'
 import TouchControls from './TouchControls.jsx'
 import RotatePrompt from './RotatePrompt.jsx'
 import LevelBar from './LevelBar.jsx'
@@ -512,10 +512,9 @@ function ReturnButton() {
           // (camera-facing) side — the same side they walked up from to hit
           // Use — rather than leaving them dead-center, where
           // resolveAgeMachineCollision's push-out no-ops (distSq ~ 0).
-          const mid = (AGE_MACHINES.tiers.length - 1) / 2
-          const x = (riding - mid) * AGE_MACHINES.spacing
-          const z = AGE_MACHINES.z + AGE_MACHINE_RADIUS + RETURN_EXIT_MARGIN
-          resetPlayer({ x: x * ISLAND_SCALE, y: AGE_MACHINES_TOP_Y, z: z * ISLAND_SCALE })
+          const spot = ageMachineSpot(riding)
+          const z = spot.z + AGE_MACHINE_RADIUS + RETURN_EXIT_MARGIN
+          resetPlayer({ x: spot.x * ISLAND_SCALE, y: spot.topY, z: z * ISLAND_SCALE })
           exitAgeMachine()
         }}
         onMouseEnter={playButtonHover}

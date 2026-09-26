@@ -367,3 +367,90 @@ export function makeWaterTexture() {
   texture.anisotropy = 8
   return texture
 }
+
+// Outlined billboard text with a procedural icon on its left — "coin" (the
+// same gold coin as makePriceTagTexture) or "rebirth" (two pink chasing
+// arrows, the HUD's Rebirth button motif). Area 2's AFK sign and gate.
+export function makeIconLabelTexture(text, { icon = 'coin', color = '#ffffff', stroke = '#1b1b1f', px = 96 } = {}) {
+  const canvas = document.createElement('canvas')
+  const g = canvas.getContext('2d')
+  const font = `900 ${px}px ${LABEL_FONT}`
+  g.font = font
+  const pad = px * 0.3
+  const iconD = px * 1.1
+  const gap = px * 0.15
+  const textW = g.measureText(text).width
+  const w = Math.ceil(pad * 2 + iconD + gap + textW)
+  const h = Math.ceil(px * 1.4)
+  canvas.width = w
+  canvas.height = h
+
+  // Resizing the canvas resets its 2D state.
+  const cx = pad + iconD / 2
+  const cy = h / 2
+  const r = iconD / 2
+  g.lineJoin = 'round'
+  if (icon === 'rebirth') {
+    g.beginPath()
+    g.arc(cx, cy, r, 0, Math.PI * 2)
+    g.fillStyle = '#ffffff'
+    g.fill()
+    g.lineWidth = px * 0.08
+    g.strokeStyle = stroke
+    g.stroke()
+    const ar = r * 0.58
+    g.lineWidth = px * 0.16
+    g.strokeStyle = '#ff4fa3'
+    g.fillStyle = '#ff4fa3'
+    for (const start of [-0.35, Math.PI - 0.35]) {
+      const end = start + Math.PI * 0.72
+      g.beginPath()
+      g.arc(cx, cy, ar, start, end)
+      g.stroke()
+      // Arrowhead at the arc's end, pointing along its direction of travel.
+      const hx = cx + Math.cos(end) * ar
+      const hy = cy + Math.sin(end) * ar
+      const tx = -Math.sin(end)
+      const ty = Math.cos(end)
+      const s = px * 0.2
+      g.beginPath()
+      g.moveTo(hx + tx * s, hy + ty * s)
+      g.lineTo(hx - Math.cos(end) * s, hy - Math.sin(end) * s)
+      g.lineTo(hx + Math.cos(end) * s, hy + Math.sin(end) * s)
+      g.closePath()
+      g.fill()
+    }
+  } else {
+    g.beginPath()
+    g.arc(cx, cy, r, 0, Math.PI * 2)
+    g.fillStyle = '#ffb020'
+    g.fill()
+    g.lineWidth = px * 0.12
+    g.strokeStyle = stroke
+    g.stroke()
+    g.beginPath()
+    g.arc(cx, cy, r - px * 0.1, 0, Math.PI * 2)
+    g.lineWidth = px * 0.07
+    g.strokeStyle = '#c97800'
+    g.stroke()
+    g.beginPath()
+    g.ellipse(cx, cy, r * 0.28, r * 0.55, 0, 0, Math.PI * 2)
+    g.fillStyle = '#ffd782'
+    g.fill()
+  }
+
+  g.font = font
+  g.textAlign = 'left'
+  g.textBaseline = 'middle'
+  g.lineWidth = px * 0.2
+  g.strokeStyle = stroke
+  const tx = pad + iconD + gap
+  g.strokeText(text, tx, cy)
+  g.fillStyle = color
+  g.fillText(text, tx, cy)
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.anisotropy = 4
+  return { texture, aspect: w / h }
+}

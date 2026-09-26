@@ -11,6 +11,7 @@ import {
   ROCKS,
   OBBY,
 } from '../data/island.js'
+import { AREA2_TREES, AREA2_BUSHES, AREA2_ROCKS, AREA2_GATE, AFK_CRATES } from '../data/area2.js'
 import { ISLAND_SCALE } from '../data/world.js'
 
 // Solid landmarks and large decor (trees/bushes/rocks) are static obstacles:
@@ -36,6 +37,11 @@ const OBSTACLES = [
   ...TREES.map((t) => ({ x: t.x, z: t.z, radius: 1.3 * t.scale })),
   ...BUSHES.map((b) => ({ x: b.x, z: b.z, radius: 0.75 * b.scale })),
   ...ROCKS.map((r) => ({ x: r.x, z: r.z, radius: 0.6 * r.scale })),
+  // Area 2 (data/area2.js).
+  ...AREA2_TREES.map((t) => ({ x: t.x, z: t.z, radius: 1.3 * t.scale })),
+  ...AREA2_BUSHES.map((b) => ({ x: b.x, z: b.z, radius: 0.75 * b.scale })),
+  ...AREA2_ROCKS.map((r) => ({ x: r.x, z: r.z, radius: 0.6 * r.scale })),
+  ...AFK_CRATES.map((c) => ({ x: c.x, z: c.z, radius: 0.8 })),
 ]
 
 // The Obby entry pads (Impossible Bridge/Stud Jumps/Tsunami Escape) are
@@ -44,7 +50,10 @@ const OBSTACLES = [
 // footprint (IslandLandmarks.jsx's Obby() box), well under scenePortals.js's
 // PORTAL_RADIUS (2.8) so the hold-E prompt still arms before the player is
 // stopped, since nothing requires actually standing on the pad.
-const BOX_OBSTACLES = [...OBBY.pads.map((p) => ({ x: OBBY.x, z: p.z, halfX: 1.2, halfZ: 1.2 }))]
+const BOX_OBSTACLES = [
+  ...OBBY.pads.map((p) => ({ x: OBBY.x, z: p.z, halfX: 1.2, halfZ: 1.2 })),
+  ...AREA2_GATE.pillarZ.map((z) => ({ x: AREA2_GATE.x, z, halfX: AREA2_GATE.pillarSize / 2, halfZ: AREA2_GATE.pillarSize / 2 })),
+]
 
 // Pushes (worldX, worldZ) out of any landmark/decor obstacle it overlaps,
 // given the player's own radius (world metres). Local circles/boxes are
