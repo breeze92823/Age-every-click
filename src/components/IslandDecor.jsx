@@ -3,6 +3,7 @@ import { BoxGeometry, Color, InstancedMesh, MeshStandardMaterial, Object3D } fro
 import { MATERIAL_PBR } from '../data/materials.js'
 import { GROUND_Y } from '../data/world.js'
 import { TREES, BUSHES, ROCKS, FLOWERS } from '../data/island.js'
+import { AREA2_TREES, AREA2_BUSHES, AREA2_ROCKS, AREA2_FLOWERS } from '../data/area2.js'
 
 // Every tree, bush, rock and flower on the island is built from coloured
 // boxes, so they all share one InstancedMesh — a single draw call. A box is
@@ -83,6 +84,10 @@ function buildDecorBoxes() {
   for (const b of BUSHES) bush(b, out)
   for (const r of ROCKS) rock(r, out)
   for (const f of FLOWERS) flowers(f, out)
+  for (const t of AREA2_TREES) tree(t, out)
+  for (const b of AREA2_BUSHES) bush(b, out)
+  for (const r of AREA2_ROCKS) rock(r, out)
+  for (const f of AREA2_FLOWERS) flowers(f, out)
   return out
 }
 

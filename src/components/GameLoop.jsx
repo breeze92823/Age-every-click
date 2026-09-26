@@ -4,6 +4,7 @@ import { step } from '../systems/playerMovement.js'
 import { update as updateCamera } from '../systems/cameraOrbit.js'
 import { step as stepActionPopups } from '../systems/actionPopups.js'
 import { notifyFirstFrame } from '../systems/bloxity.js'
+import { stepAfkZone } from '../systems/area2.js'
 import { useGameStore } from '../store/useGameStore.js'
 
 // The single simulation tick. Rendered before the view components so its
@@ -16,6 +17,8 @@ export default function GameLoop() {
     step(dt)
     // No-ops unless the player is riding an Age Machine.
     useGameStore.getState().tickAgeMachine(dt)
+    // Area 2's AFK zone: pays coins on a timer while the player stands in it.
+    stepAfkZone(dt)
     updateCamera(camera, dt)
     // Projects the player to the screen and ages live "+N" popups.
     stepActionPopups(dt, camera)

@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { WHEEL_PRIZES, SLICE_LINES } from '../data/luckyWheel.js'
 
 // Canvas-painted textures for the island's signage and conveyor curbs, so
 // the level stays free of image/font asset downloads (same idea as
@@ -327,6 +328,104 @@ export function makeChevronTexture({ color, background = null, count = 1 }) {
   return texture
 }
 
+// Age Machine glass: one raised, bevelled square pane per tile over a
+// fainter backing, all white so the glass material's color tints it. The
+// alpha channel carries the pattern, so panes read more solid than the gaps.
+export function makeGlassGridTexture({ repeatX = 12, repeatY = 8 } = {}) {
+  const size = 64
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = size
+  const g = canvas.getContext('2d')
+  g.fillStyle = 'rgba(255,255,255,0.35)'
+  g.fillRect(0, 0, size, size)
+
+  const inset = size * 0.14
+  const pane = size - inset * 2
+  const bevel = size * 0.07
+  g.fillStyle = 'rgba(255,255,255,0.75)'
+  g.fillRect(inset, inset, pane, pane)
+  g.fillStyle = 'rgba(255,255,255,0.95)'
+  g.fillRect(inset, inset, pane, bevel)
+  g.fillRect(inset, inset, bevel, pane)
+  g.fillStyle = 'rgba(150,175,200,0.8)'
+  g.fillRect(inset, inset + pane - bevel, pane, bevel)
+  g.fillRect(inset + pane - bevel, inset, bevel, pane)
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping
+  texture.repeat.set(repeatX, repeatY)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.anisotropy = 4
+  return texture
+}
+
+// Molten Age Machine skin: near-black rock split by branching orange cracks
+// with hot yellow cores. Used as both map and emissiveMap, so the cracks
+// glow while the rock stays dark. Seamless like makeWaterTexture.
+export function makeLavaTexture({ repeatX = 3, repeatY = 1 } = {}) {
+  const size = 256
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = size
+  const g = canvas.getContext('2d')
+  g.fillStyle = '#1c120c'
+  g.fillRect(0, 0, size, size)
+  g.lineCap = 'round'
+  g.lineJoin = 'round'
+  let seed = 11
+  const rand = () => {
+    seed = (seed * 16807) % 2147483647
+    return seed / 2147483647
+  }
+  // Each crack is a jagged polyline, sometimes forking once.
+  const cracks = []
+  for (let i = 0; i < 9; i++) {
+    let x = rand() * size
+    let y = rand() * size
+    let a = rand() * Math.PI * 2
+    const pts = [[x, y]]
+    const steps = 4 + Math.floor(rand() * 4)
+    for (let s = 0; s < steps; s++) {
+      a += (rand() - 0.5) * 1.3
+      const len = 14 + rand() * 22
+      x += Math.cos(a) * len
+      y += Math.sin(a) * len
+      pts.push([x, y])
+      if (s === 2 && rand() < 0.6) {
+        const b = a + (rand() < 0.5 ? 1 : -1) * (0.7 + rand() * 0.6)
+        cracks.push([
+          [x, y],
+          [x + Math.cos(b) * 24, y + Math.sin(b) * 24],
+          [x + Math.cos(b) * 44 + (rand() - 0.5) * 16, y + Math.sin(b) * 44 + (rand() - 0.5) * 16],
+        ])
+      }
+    }
+    cracks.push(pts)
+  }
+  const strokeAll = (width, color) => {
+    g.lineWidth = width
+    g.strokeStyle = color
+    for (const pts of cracks) {
+      for (const ox of [-size, 0, size]) {
+        for (const oy of [-size, 0, size]) {
+          g.beginPath()
+          pts.forEach(([px, py], n) => (n ? g.lineTo(px + ox, py + oy) : g.moveTo(px + ox, py + oy)))
+          g.stroke()
+        }
+      }
+    }
+  }
+  strokeAll(12, 'rgba(255,70,10,0.35)')
+  strokeAll(7, '#ff6a12')
+  strokeAll(3, '#ffc93a')
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping
+  texture.repeat.set(repeatX, repeatY)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.anisotropy = 8
+  return texture
+}
+
 // Seamless sea-surface tile: a pale-blue base with short white ripple arcs.
 // Multiplied by the water material's colour, so the base only needs to be a
 // touch off-white for the ripples to read as highlights.
@@ -366,4 +465,214 @@ export function makeWaterTexture() {
   texture.colorSpace = THREE.SRGBColorSpace
   texture.anisotropy = 8
   return texture
+}
+
+// Outlined billboard text with a procedural icon on its left — "coin" (the
+// same gold coin as makePriceTagTexture) or "rebirth" (two pink chasing
+// arrows, the HUD's Rebirth button motif). Area 2's AFK sign and gate.
+export function makeIconLabelTexture(text, { icon = 'coin', color = '#ffffff', stroke = '#1b1b1f', px = 96 } = {}) {
+  const canvas = document.createElement('canvas')
+  const g = canvas.getContext('2d')
+  const font = `900 ${px}px ${LABEL_FONT}`
+  g.font = font
+  const pad = px * 0.3
+  const iconD = px * 1.1
+  const gap = px * 0.15
+  const textW = g.measureText(text).width
+  const w = Math.ceil(pad * 2 + iconD + gap + textW)
+  const h = Math.ceil(px * 1.4)
+  canvas.width = w
+  canvas.height = h
+
+  // Resizing the canvas resets its 2D state.
+  const cx = pad + iconD / 2
+  const cy = h / 2
+  const r = iconD / 2
+  g.lineJoin = 'round'
+  if (icon === 'rebirth') {
+    g.beginPath()
+    g.arc(cx, cy, r, 0, Math.PI * 2)
+    g.fillStyle = '#ffffff'
+    g.fill()
+    g.lineWidth = px * 0.08
+    g.strokeStyle = stroke
+    g.stroke()
+    const ar = r * 0.58
+    g.lineWidth = px * 0.16
+    g.strokeStyle = '#ff4fa3'
+    g.fillStyle = '#ff4fa3'
+    for (const start of [-0.35, Math.PI - 0.35]) {
+      const end = start + Math.PI * 0.72
+      g.beginPath()
+      g.arc(cx, cy, ar, start, end)
+      g.stroke()
+      // Arrowhead at the arc's end, pointing along its direction of travel.
+      const hx = cx + Math.cos(end) * ar
+      const hy = cy + Math.sin(end) * ar
+      const tx = -Math.sin(end)
+      const ty = Math.cos(end)
+      const s = px * 0.2
+      g.beginPath()
+      g.moveTo(hx + tx * s, hy + ty * s)
+      g.lineTo(hx - Math.cos(end) * s, hy - Math.sin(end) * s)
+      g.lineTo(hx + Math.cos(end) * s, hy + Math.sin(end) * s)
+      g.closePath()
+      g.fill()
+    }
+  } else {
+    g.beginPath()
+    g.arc(cx, cy, r, 0, Math.PI * 2)
+    g.fillStyle = '#ffb020'
+    g.fill()
+    g.lineWidth = px * 0.12
+    g.strokeStyle = stroke
+    g.stroke()
+    g.beginPath()
+    g.arc(cx, cy, r - px * 0.1, 0, Math.PI * 2)
+    g.lineWidth = px * 0.07
+    g.strokeStyle = '#c97800'
+    g.stroke()
+    g.beginPath()
+    g.ellipse(cx, cy, r * 0.28, r * 0.55, 0, 0, Math.PI * 2)
+    g.fillStyle = '#ffd782'
+    g.fill()
+  }
+
+  g.font = font
+  g.textAlign = 'left'
+  g.textBaseline = 'middle'
+  g.lineWidth = px * 0.2
+  g.strokeStyle = stroke
+  const tx = pad + iconD + gap
+  g.strokeText(text, tx, cy)
+  g.fillStyle = color
+  g.fillText(text, tx, cy)
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.anisotropy = 4
+  return { texture, aspect: w / h }
+}
+
+// The Lucky Wheel popup's face (components/hud/LuckyWheel.jsx's WheelFace +
+// hub cap), repainted on a canvas for the Statue's medallion. Drawn in the
+// SVG's own -100..100 viewBox space, so its numbers can be kept in sync by
+// eye. Slice 0 sits at 12 o'clock, clockwise, same as the popup. The area
+// outside the ring is stone-colored so it blends into the disc's rim.
+export function makeWheelFaceTexture({ size = 1024, background = '#d0d5de' } = {}) {
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const g = canvas.getContext('2d')
+  g.fillStyle = background
+  g.fillRect(0, 0, size, size)
+  g.translate(size / 2, size / 2)
+  g.scale(size / 200, size / 200)
+  g.lineJoin = 'round'
+  g.lineCap = 'round'
+
+  const R_RING = 98
+  const R_SLICE = 90
+  const sliceRad = (Math.PI * 2) / WHEEL_PRIZES.length
+
+  g.beginPath()
+  g.arc(0, 0, R_RING, 0, Math.PI * 2)
+  g.fillStyle = '#fff'
+  g.fill()
+  g.lineWidth = 2.5
+  g.strokeStyle = '#000'
+  g.stroke()
+
+  // Canvas angles run from +X; the popup's run clockwise from 12 o'clock.
+  WHEEL_PRIZES.forEach((prize, i) => {
+    const mid = i * sliceRad - Math.PI / 2
+    g.beginPath()
+    g.moveTo(0, 0)
+    g.arc(0, 0, R_SLICE, mid - sliceRad / 2, mid + sliceRad / 2)
+    g.closePath()
+    g.fillStyle = prize.color
+    g.fill()
+    g.lineWidth = 2.5
+    g.stroke()
+  })
+
+  WHEEL_PRIZES.forEach((prize, i) => {
+    g.save()
+    g.rotate(i * sliceRad)
+    g.save()
+    g.translate(0, -60)
+    drawWheelPrizeIcon(g, prize.kind)
+    g.restore()
+    g.font = `900 8.5px ${LABEL_FONT}`
+    g.textAlign = 'center'
+    g.textBaseline = 'middle'
+    g.lineWidth = 2.4
+    g.strokeStyle = '#000'
+    g.fillStyle = '#fff'
+    const lines = SLICE_LINES[prize.id]
+    lines.forEach((line, n) => {
+      const y = -38 + (n - (lines.length - 1) / 2) * 8.5 + (lines.length === 1 ? 4 : 0)
+      g.strokeText(line, 0, y)
+      g.fillText(line, 0, y)
+    })
+    g.restore()
+  })
+
+  // Hub cap.
+  g.beginPath()
+  g.arc(0, 0, 12, 0, Math.PI * 2)
+  g.fillStyle = '#ff9d1a'
+  g.fill()
+  g.lineWidth = 2.5
+  g.strokeStyle = '#000'
+  g.stroke()
+  g.beginPath()
+  g.arc(0, 0, 8, 0, Math.PI * 2)
+  g.fillStyle = '#ffc45c'
+  g.fill()
+  g.lineWidth = 1.5
+  g.strokeStyle = '#b45f06'
+  g.stroke()
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.anisotropy = 8
+  return texture
+}
+
+// Canvas twin of LuckyWheel.jsx's PrizeIcon, drawn centred on the origin.
+function drawWheelPrizeIcon(g, kind) {
+  if (kind === 'age') {
+    const arrow = new Path2D('M-9,3 L0,-10 L9,3 L3.5,3 L3.5,11 L-3.5,11 L-3.5,3 Z')
+    g.lineWidth = 1.6
+    g.strokeStyle = '#0b2540'
+    g.fillStyle = '#eaf6ff'
+    for (const [dx, dy] of [
+      [-4, -3],
+      [4, 3],
+    ]) {
+      g.save()
+      g.translate(dx, dy)
+      g.fill(arrow)
+      g.stroke(arrow)
+      g.restore()
+    }
+    return
+  }
+  if (kind === 'speedCoil') {
+    const coil = new Path2D('M-10,-10 Q0,-15 10,-8 M-10,-3 Q0,-8 10,-1 M-10,4 Q0,-1 10,6 M-10,11 Q0,6 10,13')
+    g.lineWidth = 6
+    g.strokeStyle = '#3b0a12'
+    g.stroke(coil)
+    g.lineWidth = 3.4
+    g.strokeStyle = '#ff7d92'
+    g.stroke(coil)
+    return
+  }
+  const emoji = kind === 'coins' ? '🪙' : kind === 'noLuck' ? '😢' : '🚀'
+  g.font = '22px system-ui, "Segoe UI Emoji", "Apple Color Emoji", sans-serif'
+  g.textAlign = 'center'
+  g.textBaseline = 'middle'
+  g.fillStyle = '#000'
+  g.fillText(emoji, 0, 0)
 }

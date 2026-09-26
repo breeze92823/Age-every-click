@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useGameStore } from '../../store/useGameStore.js'
-import { WHEEL_PRIZES, SPIN_PRICE_COINS } from '../../data/luckyWheel.js'
+import { WHEEL_PRIZES, SLICE_LINES, SPIN_PRICE_COINS } from '../../data/luckyWheel.js'
 import { formatCompact } from '../../systems/format.js'
 import { requestFreeSpin } from '../../systems/net.js'
 import { playButtonClick, playButtonHover, playLevelUp, playActionFail } from '../../systems/sfx.js'
@@ -33,15 +33,6 @@ function slicePath(i) {
   const a = i * SLICE_DEG - SLICE_DEG / 2
   const b = i * SLICE_DEG + SLICE_DEG / 2
   return `M0,0 L${point(a)} A${R_SLICE},${R_SLICE} 0 0 1 ${point(b)} Z`
-}
-
-const SLICE_LINES = {
-  age500: ['500', 'Age'],
-  coins3000: ['3,000'],
-  ageBoost: ['x2 Age', '(30s)'],
-  age200: ['200', 'Age'],
-  noLuck: ['No', 'Luck'],
-  speedCoil: ['X2 Click', 'Gain'],
 }
 
 function PrizeIcon({ kind }) {

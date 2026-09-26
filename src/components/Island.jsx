@@ -10,6 +10,7 @@ import { flatRect, slab, directedStrip, merge } from '../systems/levelGeometry.j
 import { curbStrips } from '../systems/conveyor.js'
 import IslandDecor from './IslandDecor.jsx'
 import IslandLandmarks from './IslandLandmarks.jsx'
+import Area2 from './Area2.jsx'
 
 // The hub island: stepped grass-topped terrain on a sand ledge, grey stud
 // plazas, and chevron-curbed grass beds — each surface type merged into one
@@ -110,6 +111,7 @@ export default function Island() {
       ))}
       <IslandDecor />
       <IslandLandmarks />
+      <Area2 />
     </group>
   )
 }

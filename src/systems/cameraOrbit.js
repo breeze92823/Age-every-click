@@ -1,13 +1,13 @@
 import { inputState } from './input.js'
 import { player } from './playerState.js'
+import { safeDistance, resolvePosition } from './cameraCollision.js'
 
 // Third-person follow with right/middle-drag orbit + wheel zoom, plus a
 // keyboard turn: A/D and the left/right arrows yaw the camera around the
 // player at a constant rate, so W/S become "walk the way the camera's
 // facing" rather than a fixed world-relative direction. Trimmed from
-// Ice-Skate's version by dropping its wall-collision clamp — this
-// template's ground is one flat open plane, nothing to clip the camera
-// into.
+// Ice-Skate's version. cameraCollision.js keeps the boom out of the ground
+// and out of solid scenery.
 const START_PITCH = 0.35 // radians above the horizon
 const state = {
   yaw: 0, // radians; 0 puts the camera on +Z looking toward -Z
@@ -120,9 +120,11 @@ export function update(camera, dt) {
   const dirY = Math.sin(state.pitch)
   const dirZ = Math.cos(state.yaw) * cp
 
-  const desiredX = target.x + dirX * state.distance
-  const desiredY = target.y + dirY * state.distance
-  const desiredZ = target.z + dirZ * state.distance
+  // Shorten the boom if it would end up in the floor or an obstacle.
+  const boom = safeDistance(target.x, target.y, target.z, dirX, dirY, dirZ, state.distance)
+  const desiredX = target.x + dirX * boom
+  const desiredY = target.y + dirY * boom
+  const desiredZ = target.z + dirZ * boom
 
   // Strip last frame's bob so the smoothing below runs on the clean rig.
   camera.position.x -= bobOffset.x
@@ -146,6 +148,10 @@ export function update(camera, dt) {
     lookAt.y += (target.y - lookAt.y) * tLook
     lookAt.z += (target.z - lookAt.z) * tLook
   }
+
+  // Smoothing eases between safe points but can still cut a corner or dip
+  // under the floor, so clamp the eased position too.
+  resolvePosition(camera.position)
 
   camera.lookAt(lookAt.x, lookAt.y, lookAt.z)
   applyMotionFeel(camera, dt, teleported)

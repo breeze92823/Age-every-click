@@ -7,6 +7,7 @@ import { terrainHeightAt } from './terrainHeight.js'
 import { conveyorPushAt } from './conveyor.js'
 import { resolveAgeMachineCollision } from './ageMachineCollision.js'
 import { resolveLandmarkCollision } from './landmarkCollision.js'
+import { resolveArea2Walls } from './area2.js'
 import { checkScenePortal } from './scenePortals.js'
 import { checkStatueInteract, syncStatueInteractHeld } from './statueInteract.js'
 import { bonusGroundAt, stepBonusBridge, resetBonusBridge } from './bonusBridge.js'
@@ -126,6 +127,7 @@ export function step(dt) {
     const blocked2 = resolveLandmarkCollision(blocked.x, blocked.z, player.dims.radius)
     p.x = blocked2.x
     p.z = blocked2.z
+    resolveArea2Walls(p, player.dims.radius)
     resolveTrampolineWall(prevY, p, player.dims.radius)
   } else if (onStudJumps) {
     resolveStudJumpsWalls(prevX, prevZ, p, player.dims.radius)

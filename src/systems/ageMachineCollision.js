@@ -1,4 +1,4 @@
-import { AGE_MACHINES } from '../data/island.js'
+import { ALL_AGE_MACHINE_CENTERS } from '../data/area2.js'
 import { ISLAND_SCALE } from '../data/world.js'
 
 // Each Age Machine's pedestal (AgeMachine's base cylinder in
@@ -11,11 +11,8 @@ import { ISLAND_SCALE } from '../data/world.js'
 // this radius when they leave a machine, instead of relying on next frame's
 // push-out (which no-ops right at the center — see the distSq guard below).
 export const AGE_MACHINE_RADIUS = 0.9
-const mid = (AGE_MACHINES.colors.length - 1) / 2
-const AGE_MACHINE_CENTERS = AGE_MACHINES.colors.map((_, i) => ({
-  x: (i - mid) * AGE_MACHINES.spacing,
-  z: AGE_MACHINES.z,
-}))
+// Hub machines first, then Area 2's (data/area2.js).
+const AGE_MACHINE_CENTERS = ALL_AGE_MACHINE_CENTERS
 
 // Pushes (worldX, worldZ) out of any age machine pedestal it overlaps, given
 // the player's own radius (world metres). Local rects/circles are authored

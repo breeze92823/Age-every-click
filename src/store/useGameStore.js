@@ -18,7 +18,7 @@ import {
 import { HEX_SPEED_PAD_TIERS } from '../data/hexPowerPad.js'
 import { AURA_TIERS, auraStrengthMultiplier } from '../data/aura.js'
 import { SHOP_ITEMS } from '../data/shop.js'
-import { AGE_MACHINES } from '../data/island.js'
+import { ALL_AGE_MACHINE_TIERS } from '../data/area2.js'
 import { readLocalFreeSpinReadyAt } from '../systems/freeSpin.js'
 import {
   WHEEL_PRIZES,
@@ -63,7 +63,7 @@ export const useGameStore = create((set, get) => ({
   equippedHexPad: 0,
   ownedAuras: new Set(),
   equippedAura: null,
-  // Indices into data/island.js's AGE_MACHINES.tiers that the player has
+  // Indices into data/area2.js's ALL_AGE_MACHINE_TIERS (hub, then Area 2) the player has
   // bought.
   ownedAgeMachines: new Set(),
 
@@ -283,7 +283,7 @@ export const useGameStore = create((set, get) => ({
   buyAgeMachine(index) {
     const state = get()
     if (state.ownedAgeMachines.has(index)) return false
-    const tier = AGE_MACHINES.tiers[index]
+    const tier = ALL_AGE_MACHINE_TIERS[index]
     if (!tier || tier.price == null || state.coins < tier.price) return false
     set((s) => ({ coins: s.coins - tier.price, ownedAgeMachines: new Set(s.ownedAgeMachines).add(index) }))
     return true
@@ -313,7 +313,7 @@ export const useGameStore = create((set, get) => ({
   tickAgeMachine(dt) {
     const state = get()
     if (state.ridingAgeMachine == null) return
-    const tier = AGE_MACHINES.tiers[state.ridingAgeMachine]
+    const tier = ALL_AGE_MACHINE_TIERS[state.ridingAgeMachine]
     if (!tier || !(tier.ageRate > 0)) return
     set((s) => derive({ ...s, speed: clamp(s.speed + tier.ageRate * dt, SPEED_MIN, SPEED_MAX) }))
   },

@@ -14,6 +14,17 @@ export const WHEEL_PRIZES = [
   { id: 'speedCoil', kind: 'speedCoil', weight: 5, firstWeight: 0, color: '#ff3d0a', label: 'X2 Click Gain' },
 ]
 
+// The text printed on each slice, one entry per line — shared by the popup's
+// SVG face and the Statue medallion's canvas copy of it.
+export const SLICE_LINES = {
+  age500: ['500', 'Age'],
+  coins3000: ['3,000'],
+  ageBoost: ['x2 Age', '(30s)'],
+  age200: ['200', 'Age'],
+  noLuck: ['No', 'Luck'],
+  speedCoil: ['X2 Click', 'Gain'],
+}
+
 // New players start with no spins — the first one comes from the free daily
 // claim below.
 export const SPINS_INITIAL = 0

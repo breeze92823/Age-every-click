@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import { Color, DoubleSide, ExtrudeGeometry, MeshStandardMaterial, Object3D, Path, Shape, ShapeGeometry, SphereGeometry, Vector2 } from 'three'
 import { MATERIAL_PBR } from '../data/materials.js'
 import { GROUND_Y, ISLAND_SCALE } from '../data/world.js'
-import { AGE_MACHINES_TOP_Y } from '../systems/terrainHeight.js'
+import { ageMachineSpot } from '../data/area2.js'
 import { resetPlayer } from '../systems/playerState.js'
 import { getLastBounceAt } from '../systems/trampoline.js'
 import {
@@ -29,7 +29,11 @@ import {
   makeBuyButtonTexture,
   makeStatusTagTexture,
   makeLeaderboardTexture,
+  makeWheelFaceTexture,
+  makeGlassGridTexture,
+  makeLavaTexture,
 } from '../systems/canvasTextures.js'
+import { makeStudTexture, shade } from '../systems/studTexture.js'
 import { formatCompact } from '../systems/format.js'
 import { formatShort } from '../data/format.js'
 import { useGameStore } from '../store/useGameStore.js'
@@ -47,17 +51,15 @@ const WOOD = '#9c6232'
 const WOOD_DARK = '#6e4221'
 const STONE = '#a9aeb8'
 const METAL = '#2e3138'
-// Statue's medallion — pie-slice wedge colors, prize-wheel style.
-const WHEEL_COLORS = ['#ff5b7f', '#ffcb3d', '#3ddb6a', '#5fc9ff', '#e04cf0', '#ff8a3d', '#35d0ff', '#f4f0ff']
 // AgeMachine's glass shell radius — shared with AgeMachines so the price/Buy
 // banner can sit flush against its +Z (camera-facing) surface.
 const GLASS_RADIUS = 0.6
 
-function Mat({ color, ...props }) {
+export function Mat({ color, ...props }) {
   return <meshStandardMaterial color={color} {...MATERIAL_PBR.PROP} {...props} />
 }
 
-function Box({ size, position, rotation, color, cast = true, ...mat }) {
+export function Box({ size, position, rotation, color, cast = true, ...mat }) {
   return (
     <mesh position={position} rotation={rotation} castShadow={cast} receiveShadow>
       <boxGeometry args={size} />
@@ -68,7 +70,7 @@ function Box({ size, position, rotation, color, cast = true, ...mat }) {
 
 // World-sized billboard text that always faces the camera.
 // `gradient` should be a stable (module-level) array so the memo holds.
-function Label({ text, color, position, height = 0.8, gradient }) {
+export function Label({ text, color, position, height = 0.8, gradient }) {
   const { texture, aspect } = useMemo(() => makeLabelTexture(text, { color, gradient }), [text, color, gradient])
   useEffect(() => () => texture.dispose(), [texture])
   return (
@@ -125,7 +127,9 @@ function OwnedTag({ position }) {
 //
 // Once owned, "Use" teleports the player onto the machine's stand and locks
 // them there (see useGameStore's enterAgeMachine/ridingAgeMachine and
-// playerMovement.js's freeze) until they tap the Return button.
+// playerMovement.js's freeze) until they tap the Return button. `index` is
+// the store index (data/area2.js's ALL_AGE_MACHINE_TIERS), which also says
+// which stand to park the player on.
 function BuyButton({ index, owned, price, position }) {
   const buyAgeMachine = useGameStore((s) => s.buyAgeMachine)
   const enterAgeMachine = useGameStore((s) => s.enterAgeMachine)
@@ -141,7 +145,8 @@ function BuyButton({ index, owned, price, position }) {
         if (owned) {
           if (enterAgeMachine(index)) {
             playButtonClick()
-            resetPlayer({ x: position[0] * ISLAND_SCALE, y: AGE_MACHINES_TOP_Y + 1, z: AGE_MACHINES.z * ISLAND_SCALE })
+            const spot = ageMachineSpot(index)
+            resetPlayer({ x: spot.x * ISLAND_SCALE, y: spot.topY + 1, z: spot.z * ISLAND_SCALE })
           } else {
             playActionFail()
           }
@@ -168,51 +173,145 @@ function BuyButton({ index, owned, price, position }) {
   )
 }
 
-function AgeMachine({ x, color, emissive, emissiveIntensity }) {
-  const domeEmissive = emissive ? emissiveIntensity : 0
+// Glowing shape inside the glass — a light-beam pillar or a stacked tree,
+// per the tier's `core` (data/island.js).
+function AgeMachineCore({ shape, color }) {
+  if (shape === 'tree') {
+    return (
+      <group position-y={0.4}>
+        {[
+          [0.42, 0.55, 0.45],
+          [0.33, 0.5, 0.8],
+          [0.24, 0.45, 1.12],
+          [0.15, 0.4, 1.4],
+        ].map(([r, h, y]) => (
+          <mesh key={y} position-y={y}>
+            <coneGeometry args={[r, h, 4]} />
+            <meshStandardMaterial
+              color={color}
+              emissive={color}
+              emissiveIntensity={0.45}
+              transparent
+              opacity={0.7}
+              {...MATERIAL_PBR.PROP}
+            />
+          </mesh>
+        ))}
+      </group>
+    )
+  }
+  if (shape === 'sparkle') {
+    // Four-point star: two stretched octahedra crossed, over a soft glow ball.
+    return (
+      <group position-y={1.3}>
+        {[
+          [0.07, 0.42, 0.07],
+          [0.42, 0.07, 0.07],
+        ].map((scale) => (
+          <mesh key={scale[0]} scale={scale}>
+            <octahedronGeometry args={[1, 0]} />
+            <meshBasicMaterial color={color} />
+          </mesh>
+        ))}
+        <mesh>
+          <sphereGeometry args={[0.1, 12, 8]} />
+          <meshBasicMaterial color="#ffffff" />
+        </mesh>
+        <mesh>
+          <sphereGeometry args={[0.32, 16, 12]} />
+          <meshBasicMaterial color={color} transparent opacity={0.28} depthWrite={false} />
+        </mesh>
+      </group>
+    )
+  }
   return (
-    <group position={[x, 0.4, 0]}>
-      <mesh position-y={0.2} castShadow receiveShadow>
-        <cylinderGeometry args={[0.8, 0.9, 0.4, 16]} />
-        <Mat color={color} emissive={emissive} emissiveIntensity={domeEmissive} />
+    <group position-y={1.3}>
+      <mesh>
+        <cylinderGeometry args={[0.09, 0.09, 1.8, 10]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.8} {...MATERIAL_PBR.PROP} />
       </mesh>
-      <mesh position={[0, 1.4, -0.72]} castShadow>
-        <cylinderGeometry args={[0.12, 0.12, 2, 12]} />
-        <Mat color={METAL} />
-      </mesh>
-      <mesh position={[0, 2.4, -0.585]} rotation-x={Math.PI / 2} castShadow>
-        <cylinderGeometry args={[0.12, 0.12, 0.27, 12]} />
-        <Mat color={METAL} />
-      </mesh>
-      <mesh position-y={1.3}>
-        <cylinderGeometry args={[GLASS_RADIUS, GLASS_RADIUS, 1.8, 20, 1, true]} />
-        <meshStandardMaterial
-          color="#dff3ff"
-          transparent
-          opacity={0.3}
-          depthWrite={false}
-          side={DoubleSide}
-          {...MATERIAL_PBR.GLASS}
-        />
-      </mesh>
-      <mesh position-y={2.3} castShadow>
-        <cylinderGeometry args={[0.7, 0.7, 0.2, 16]} />
-        <Mat color={color} emissive={emissive} emissiveIntensity={domeEmissive} />
-      </mesh>
-      <mesh position-y={2.4} castShadow>
-        <sphereGeometry args={[0.45, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <Mat color={color} emissive={emissive} emissiveIntensity={domeEmissive} />
+      <mesh>
+        <cylinderGeometry args={[0.22, 0.22, 1.8, 14, 1, true]} />
+        <meshBasicMaterial color={color} transparent opacity={0.3} depthWrite={false} side={DoubleSide} />
       </mesh>
     </group>
   )
 }
 
-function AgeMachines() {
-  const { z, spacing, tiers, standDepth, standHeight } = AGE_MACHINES
+function AgeMachine({ x, tier }) {
+  const { color, emissive, emissiveIntensity, glass = '#dff3ff', blocky, lava, core, knob } = tier
+  // Blocky tiers get studded bodies and gridded glass, lava tiers glowing
+  // cracks (body and side pole); the rest keep flat materials.
+  const bodyMap = useMemo(() => {
+    if (lava) return makeLavaTexture()
+    if (blocky) return makeStudTexture({ light: color, dark: shade(color, -0.08), studsPerCell: 1, repeatX: 8, repeatY: 1 })
+    return null
+  }, [lava, blocky, color])
+  const glassMap = useMemo(() => (blocky ? makeGlassGridTexture() : null), [blocky])
+  useEffect(() => () => bodyMap?.dispose(), [bodyMap])
+  useEffect(() => () => glassMap?.dispose(), [glassMap])
+  // A map multiplies the material color, and both bitmaps are already
+  // painted in the tier's colors, so the material itself goes white. Lava
+  // reuses its map as the emissiveMap so only the cracks glow.
+  let skin
+  if (lava) skin = { color: '#ffffff', map: bodyMap, emissive: '#ffffff', emissiveMap: bodyMap, emissiveIntensity: 0.9 }
+  else if (bodyMap) skin = { color: '#ffffff', map: bodyMap }
+  else skin = { color, emissive, emissiveIntensity: emissive ? emissiveIntensity : 0 }
+  const pole = lava ? skin : { color: METAL }
+  return (
+    <group position={[x, 0.4, 0]}>
+      <mesh position-y={0.2} castShadow receiveShadow>
+        <cylinderGeometry args={[0.8, 0.9, 0.4, 16]} />
+        <Mat {...skin} />
+      </mesh>
+      <mesh position={[0, 1.4, -0.72]} castShadow>
+        <cylinderGeometry args={[0.12, 0.12, 2, 12]} />
+        <Mat {...pole} />
+      </mesh>
+      <mesh position={[0, 2.4, -0.585]} rotation-x={Math.PI / 2} castShadow>
+        <cylinderGeometry args={[0.12, 0.12, 0.27, 12]} />
+        <Mat {...pole} />
+      </mesh>
+      <mesh position-y={1.3}>
+        <cylinderGeometry args={[GLASS_RADIUS, GLASS_RADIUS, 1.8, 20, 1, true]} />
+        <meshStandardMaterial
+          color={glassMap ? '#d6f2ff' : glass}
+          map={glassMap}
+          transparent
+          opacity={glassMap ? 0.6 : 0.3}
+          depthWrite={false}
+          side={DoubleSide}
+          {...MATERIAL_PBR.GLASS}
+        />
+      </mesh>
+      {core && <AgeMachineCore shape={core.shape} color={core.color} />}
+      <mesh position-y={2.3} castShadow>
+        <cylinderGeometry args={[0.7, 0.7, 0.2, 16]} />
+        <Mat {...skin} />
+      </mesh>
+      <mesh position-y={2.4} castShadow>
+        <sphereGeometry args={[0.45, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <Mat {...skin} />
+      </mesh>
+      {blocky && (
+        <mesh position-y={2.92} castShadow>
+          <cylinderGeometry args={[0.14, 0.18, 0.18, 12]} />
+          <Mat color={knob ?? color} />
+        </mesh>
+      )}
+    </group>
+  )
+}
+
+// One stand of machines. Defaults to the hub's; Area2.jsx passes its own
+// (data/area2.js's AREA2_AGE_MACHINES), whose `firstIndex` offsets each
+// machine's store index past the hub's.
+export function AgeMachines({ config = AGE_MACHINES }) {
+  const { x: standX = 0, z, spacing, tiers, standDepth, standHeight, firstIndex = 0 } = config
   const ownedAgeMachines = useGameStore((s) => s.ownedAgeMachines)
   const mid = (tiers.length - 1) / 2
   return (
-    <group position={[0, GROUND_Y, z]}>
+    <group position={[standX, GROUND_Y, z]}>
       <Box
         size={[tiers.length * spacing + 1, standHeight, standDepth]}
         position={[0, standHeight / 2, 0]}
@@ -220,12 +319,13 @@ function AgeMachines() {
       />
       {tiers.map((t, i) => {
         const x = (i - mid) * spacing
-        const owned = ownedAgeMachines.has(i)
+        const index = firstIndex + i
+        const owned = ownedAgeMachines.has(index)
         const purchasable = t.price != null || t.priceLabel != null
         return (
           <group key={t.name}>
-            <AgeMachine x={x} color={t.color} emissive={t.emissive} emissiveIntensity={t.emissiveIntensity} />
-            <TierLabel name={t.name} rate={t.rate} color={t.emissive ?? t.color} position={[x, 3.7, 0]} />
+            <AgeMachine x={x} tier={t} />
+            <TierLabel name={t.name} rate={t.rate} color={t.labelColor ?? t.emissive ?? t.color} position={[x, 3.7, 0]} />
             {(purchasable || owned) && (
               <>
                 {owned ? (
@@ -233,7 +333,7 @@ function AgeMachines() {
                 ) : (
                   <PriceTag text={t.priceLabel ?? formatCompact(t.price)} position={[x, 1.95, GLASS_RADIUS + 0.4]} />
                 )}
-                <BuyButton index={i} owned={owned} price={t.price} position={[x, 1.55, GLASS_RADIUS + 0.1]} />
+                <BuyButton index={index} owned={owned} price={t.price} position={[x, 1.55, GLASS_RADIUS + 0.1]} />
               </>
             )}
           </group>
@@ -315,56 +415,23 @@ function Shop() {
 // undoing the change to keep facing the leaderboards.
 const STATUE_BASE_YAW = -0.5
 
-// Medallion light show: 2-3 wedges glow at once, never side by side, and the
-// lit set reshuffles every WHEEL_LIGHT_PERIOD seconds. Levels ease toward
-// their target so wedges fade like bulbs rather than snapping.
-const WHEEL_LIGHT_PERIOD = 0.6
-const WHEEL_LIGHT_FADE = 12 // per-second ease rate
-const WHEEL_LIT_INTENSITY = 3
-const WHEEL_DIM = 0.7 // unlit wedge brightness, so the lit ones pop
-
-function pickLitWedges(count, previous) {
-  const n = WHEEL_COLORS.length
-  for (let tries = 0; tries < 50; tries++) {
-    const picked = []
-    const order = Array.from({ length: n }, (_, i) => i).sort(() => Math.random() - 0.5)
-    const want = Math.random() < 0.5 ? 2 : 3
-    for (const i of order) {
-      if (picked.length === want) break
-      // Circular distance >= 2 from every already-picked wedge (no neighbours).
-      if (picked.every((j) => Math.min((i - j + n) % n, (j - i + n) % n) >= 2)) picked.push(i)
-    }
-    const changed = !previous || picked.length !== previous.length || picked.some((i) => !previous.includes(i))
-    if (picked.length >= count && changed) return picked
-  }
-  return [0, 3, 6]
-}
+// How much the medallion's face glows on its own, so it reads bright like
+// the Lucky Wheel popup even when the statue sits in shade.
+const WHEEL_FACE_GLOW = 0.35
+// Medallion size and height. The upper base tops out at y = 1.1, and the tilted
+// disc reaches ~0.99 * radius below its centre, so the centre sits a little
+// over 1.1 + 1.25 * WHEEL_SCALE up to keep the disc clear of the base.
+const WHEEL_SCALE = 1.5
+const WHEEL_CENTER_Y = 3.05
+// The face turns clockwise (seen from the front) in an endless slow loop.
+const WHEEL_SPIN_SPEED = 0.35 // rad/s, ~18 s per turn
 
 function Statue() {
-  const wheelRef = useRef(null)
-  const wedgeMats = useMemo(
-    () =>
-      WHEEL_COLORS.map(
-        (color) => new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0, ...MATERIAL_PBR.PROP }),
-      ),
-    [],
-  )
-  const wedgeLight = useRef({ lit: [], levels: WHEEL_COLORS.map(() => 0), nextAt: 0 })
-  useEffect(() => () => wedgeMats.forEach((m) => m.dispose()), [wedgeMats])
-  useFrame(({ clock }, dt) => {
-    const s = wedgeLight.current
-    const t = clock.elapsedTime
-    if (t >= s.nextAt) {
-      s.lit = pickLitWedges(2, s.lit)
-      s.nextAt = t + WHEEL_LIGHT_PERIOD
-    }
-    const k = 1 - Math.exp(-WHEEL_LIGHT_FADE * dt)
-    wedgeMats.forEach((m, i) => {
-      s.levels[i] += ((s.lit.includes(i) ? 1 : 0) - s.levels[i]) * k
-      const level = s.levels[i]
-      m.emissiveIntensity = level * WHEEL_LIT_INTENSITY
-      m.color.set(WHEEL_COLORS[i]).multiplyScalar(WHEEL_DIM + (1 - WHEEL_DIM) * level)
-    })
+  const faceTexture = useMemo(() => makeWheelFaceTexture(), [])
+  useEffect(() => () => faceTexture.dispose(), [faceTexture])
+  const spinRef = useRef(null)
+  useFrame((_, dt) => {
+    if (spinRef.current) spinRef.current.rotation.y -= WHEEL_SPIN_SPEED * dt
   })
   const leaderboardYaw = useMemo(() => {
     const cx = (LEADERBOARDS[0].x + LEADERBOARDS[1].x) / 2
@@ -375,23 +442,21 @@ function Statue() {
     <group position={[STATUE.x, GROUND_Y, STATUE.z]} rotation-y={STATUE.yaw}>
       <Box size={[1.8, 0.6, 1.8]} position={[0, 0.3, 0]} color="#c4c9d2" emissive="#c4c9d2" emissiveIntensity={0.25} />
       <Box size={[1.2, 0.5, 1.2]} position={[0, 0.85, 0]} color="#d0d5de" emissive="#d0d5de" emissiveIntensity={0.25} />
-      <group position={[0, 2.35, 0]} rotation-y={leaderboardYaw}>
-        <group ref={wheelRef} rotation-x={Math.PI / 2 - 0.15}>
+      <group position={[0, WHEEL_CENTER_Y, 0]} rotation-y={leaderboardYaw} scale={WHEEL_SCALE}>
+        <group rotation-x={Math.PI / 2 - 0.15}>
           <mesh castShadow>
-            <cylinderGeometry args={[1.25, 1.25, 0.3, 24]} />
+            <cylinderGeometry args={[1.25, 1.25, 0.3, 48]} />
             <Mat color="#d0d5de" emissive="#d0d5de" emissiveIntensity={0.25} />
           </mesh>
-          {/* Colored decal on the outward (leaderboard-facing) side only — the
-              back face and rim stay plain stone. */}
-          <group position={[0, 0.17, 0]}>
-            {WHEEL_COLORS.map((color, i) => {
-              const thetaLength = (Math.PI * 2) / WHEEL_COLORS.length
-              return (
-                <mesh key={color} rotation-y={i * thetaLength} castShadow material={wedgeMats[i]}>
-                  <cylinderGeometry args={[1.24, 1.24, 0.04, 4, 1, false, 0, thetaLength]} />
-                </mesh>
-              )
-            })}
+          {/* The Lucky Wheel popup's face, on the outward (leaderboard-facing)
+              side only — the back face and rim stay plain stone. Laid flat
+              with rotation-x so the texture's top points up once the group's
+              tilt stands the disc upright. */}
+          <group ref={spinRef}>
+            <mesh position-y={0.151} rotation-x={-Math.PI / 2}>
+              <circleGeometry args={[1.24, 64]} />
+              <Mat map={faceTexture} emissive="#ffffff" emissiveMap={faceTexture} emissiveIntensity={WHEEL_FACE_GLOW} />
+            </mesh>
           </group>
         </group>
       </group>
