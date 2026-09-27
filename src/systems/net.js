@@ -15,7 +15,16 @@
 // Also covers what components/IslandLandmarks.jsx's two leaderboard boards
 // (Top Coins/Top Age) and cross-session save/load need: identity, live
 // stats, durable progress, and the merged global leaderboard.
-import { authState, subscribeAuth, getStableUserId, getEquippedAvatar, getProportions, onAvatarChanged, onProportionsChanged } from './bloxity.js'
+import {
+  authState,
+  subscribeAuth,
+  getStableUserId,
+  getDisplayName,
+  getEquippedAvatar,
+  getProportions,
+  onAvatarChanged,
+  onProportionsChanged,
+} from './bloxity.js'
 import { DEV_MODE } from '../data/bloxity.js'
 import { useGameStore } from '../store/useGameStore.js'
 import { claimLocalFreeSpin } from './freeSpin.js'
@@ -139,11 +148,7 @@ async function loadSdk() {
 }
 
 function currentUsername() {
-  // Signed-in account, else Bloxity's generated guest identity ("bear5" …),
-  // matching the HUD identity chip. Plain "Guest" only if neither exists.
-  const u = authState.user || authState.guest
-  const name = u && (u.displayName || u.username || u.name)
-  return typeof name === 'string' && name.trim() ? name.trim().slice(0, 64) : 'Guest'
+  return getDisplayName()
 }
 
 // --- Stats sync ---------------------------------------------------------

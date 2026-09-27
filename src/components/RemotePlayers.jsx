@@ -6,6 +6,7 @@ import { attachEquippedAccessories, applyProportions } from '../systems/avatarLo
 import { buildDefaultCharacter } from '../systems/defaultCharacter.js'
 import { makeGait, updateGait, disposeGait } from '../systems/avatarAnim.js'
 import { updateHair } from '../systems/hairPhysics.js'
+import Nametag from './Nametag.jsx'
 
 const _up = new Vector3(0, 1, 0)
 const _targetQuat = new Quaternion()
@@ -92,7 +93,12 @@ function RemotePlayer({ p }) {
     if (avatar) updateHair(avatar, delta, state.clock.elapsedTime)
   })
 
-  return <group ref={ref}>{avatar && <primitive object={avatar} />}</group>
+  return (
+    <group ref={ref}>
+      {avatar && <primitive object={avatar} />}
+      <Nametag getName={() => p.username} getAge={() => p.speed} />
+    </group>
+  )
 }
 
 // Mounts one RemotePlayer per other connected session (systems/net.js's

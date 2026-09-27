@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Quaternion, Vector3 } from 'three'
 import { player } from '../systems/playerState.js'
-import { authState, getEquippedAvatar, getProportions, onAvatarChanged, onProportionsChanged } from '../systems/bloxity.js'
+import { authState, getDisplayName, getEquippedAvatar, getProportions, onAvatarChanged, onProportionsChanged } from '../systems/bloxity.js'
 import { DEV_MODE } from '../data/bloxity.js'
 import { applyProportions, attachEquippedAccessories } from '../systems/avatarLoader.js'
 import { buildDefaultCharacter, outfitForLevel } from '../systems/defaultCharacter.js'
@@ -11,6 +11,7 @@ import { makeGait, updateGait, disposeGait } from '../systems/avatarAnim.js'
 import { updateHair } from '../systems/hairPhysics.js'
 import { useAuth } from './hud/hooks.js'
 import CharacterConfetti, { burstConfetti } from './CharacterConfetti.jsx'
+import Nametag from './Nametag.jsx'
 
 const _up = new Vector3(0, 1, 0)
 const _targetQuat = new Quaternion()
@@ -114,6 +115,7 @@ export default function Player() {
     <>
       <group ref={ref}>
         <primitive object={avatar} />
+        <Nametag getName={getDisplayName} getAge={() => useGameStore.getState().speed} />
       </group>
       <CharacterConfetti />
     </>
