@@ -577,21 +577,28 @@ function attachRoom(joined) {
   // still read directly off room.state.players.get(sessionId) every frame
   // (position/avatar fields patch in place), $() is only needed for the
   // join/leave *events* below.
+  //
+  // room.state can still be an empty shell for a moment right after
+  // joinOrCreate() resolves — the full state patch (players included) lands
+  // slightly later over the socket, not synchronously with the join.
+  // getStateCallbacks()'s proxy handles that itself (it defers registration
+  // until the `players` map instance actually arrives), but only if it's
+  // called unconditionally here — an `if (room.state.players)` guard around
+  // this would skip registering the callback entirely during that window,
+  // and it would then never fire for anyone for the rest of the session.
   const $ = sdkModule.getStateCallbacks(room)
-  if (room.state && room.state.players) {
-    $(room.state).players.onAdd((p, sessionId) => {
-      recount()
-      if (sessionId === selfId) return
-      remotePlayers.set(sessionId, p)
-      notifyRosterAdd(sessionId, p)
-    })
-    $(room.state).players.onRemove((p, sessionId) => {
-      recount()
-      if (sessionId === selfId) return
-      remotePlayers.delete(sessionId)
-      notifyRosterRemove(sessionId)
-    })
-  }
+  $(room.state).players.onAdd((p, sessionId) => {
+    recount()
+    if (sessionId === selfId) return
+    remotePlayers.set(sessionId, p)
+    notifyRosterAdd(sessionId, p)
+  })
+  $(room.state).players.onRemove((p, sessionId) => {
+    recount()
+    if (sessionId === selfId) return
+    remotePlayers.delete(sessionId)
+    notifyRosterRemove(sessionId)
+  })
 
   // Same reasoning as scheduleStatsResend: a fresh session starts every
   // field at its schema default (0), so a rejoin needs its current
