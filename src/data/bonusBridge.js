@@ -59,3 +59,21 @@ export const SPAWN_FACING = 0
 export const TIME_LIMIT = 15 // seconds, counted from leaving the spawn platform
 export const REWARD_COINS = 200
 export const FALL_RESET_Y = GROUND_Y - 12
+
+// Per-tile step reaction — systems/bonusBridge.js drives the timing,
+// components/BonusScene.jsx's Tiles reads the same progress to tween
+// position/scale/colour so the two stay in lockstep off one clock per tile.
+//
+// Safe tile: hop up on an ease-out, then settle back to rest with a
+// decaying spring wobble (see BonusScene.jsx's bounceOffset). One-shot per
+// attempt (tiles.js's `bounced` flag) — it doesn't replay every step.
+export const SAFE_BOUNCE_DURATION = 0.45 // s, total hop + settle
+export const SAFE_BOUNCE_HEIGHT = 0.15 // m, peak height of the hop
+// Unsafe tile: collision drops immediately (the player falls through) while
+// the tile itself only shrinks slightly and reddens as a "sprung trap" cue,
+// then regrows/re-arms after a delay — it's a resettable trap, not a tile
+// that's gone for the rest of the attempt.
+export const UNSAFE_SHRINK_DURATION = 0.15 // s, tween down to UNSAFE_SHRINK_SCALE
+export const UNSAFE_SHRINK_SCALE = 0.82 // scale while sprung ("shrinks slightly")
+export const UNSAFE_REGROW_DURATION = 0.25 // s, tween back to scale 1 as it re-arms
+export const UNSAFE_RESET_DELAY = 1.3 // s, sprung -> re-armed (collision back on)

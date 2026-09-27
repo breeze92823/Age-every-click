@@ -16,6 +16,8 @@ import {
   TIME_LIMIT,
   REWARD_COINS,
   FALL_RESET_Y,
+  SAFE_BOUNCE_DURATION,
+  UNSAFE_RESET_DELAY,
 } from '../data/bonusBridge.js'
 import { player, resetPlayer } from './playerState.js'
 import { syncYawToPlayer } from './cameraOrbit.js'
@@ -32,8 +34,6 @@ import { playWallBreak, playActionFail, playLevelUp } from './sfx.js'
 // the breaking tiles.
 const PLATFORM_MARGIN = 0.35
 const TILE_MARGIN = 0.2
-const TILE_FALL_GRAVITY = 22
-const TILE_GONE_DEPTH = 30
 
 // kind: 'glass' (magenta, random), 'arrow' (fixed safe), 'cross' (fixed fake)
 export const tiles = []
@@ -47,10 +47,10 @@ for (let c = 0; c < COLUMNS; c++) {
       lane,
       kind: last ? (lane === 0 ? 'arrow' : 'cross') : 'glass',
       safe: last && lane === 0,
-      revealed: false,
-      broken: false,
-      fall: 0,
-      fallVel: 0,
+      bounced: false, // one-shot guard: the safe hop only plays once per attempt
+      bounceT: null, // seconds into the safe hop tween, or null when idle
+      broken: false, // collision (see supports()) disabled while sprung
+      trapT: null, // seconds into the unsafe shrink/reset tween, or null when idle/re-armed
     })
   }
 }
@@ -67,10 +67,10 @@ export function resetBonusBridge() {
     for (const t of tiles) if (t.column === c) t.safe = t.lane === safeLane
   }
   for (const t of tiles) {
-    t.revealed = false
+    t.bounced = false
+    t.bounceT = null
     t.broken = false
-    t.fall = 0
-    t.fallVel = 0
+    t.trapT = null
   }
   running = false
   remaining = TIME_LIMIT
@@ -116,10 +116,22 @@ function respawnAtStart() {
 // Runs after playerMovement.js has landed the player this frame. Returns
 // true when it teleported the player, so the caller stops there.
 export function stepBonusBridge(dt) {
+  // Advance each tile's own tween clock. A safe hop always finishes and
+  // clears (bounceT -> null); an unsafe trap re-arms itself the same way —
+  // broken flips back to false the instant its clock runs out, so
+  // supports() starts holding weight on it again.
   for (const t of tiles) {
-    if (!t.broken || t.fall >= TILE_GONE_DEPTH) continue
-    t.fallVel += TILE_FALL_GRAVITY * dt
-    t.fall += t.fallVel * dt
+    if (t.bounceT != null) {
+      t.bounceT += dt
+      if (t.bounceT >= SAFE_BOUNCE_DURATION) t.bounceT = null
+    }
+    if (t.trapT != null) {
+      t.trapT += dt
+      if (t.trapT >= UNSAFE_RESET_DELAY) {
+        t.trapT = null
+        t.broken = false
+      }
+    }
   }
 
   const p = player.position
@@ -127,9 +139,16 @@ export function stepBonusBridge(dt) {
   if (player.grounded) {
     for (const t of tiles) {
       if (!supports(t, p.x, p.z)) continue
-      if (t.safe) t.revealed = true
-      else {
+      if (t.safe) {
+        // One-shot: don't restart the hop every frame the player just
+        // stands there, or keep re-triggering it on repeat visits.
+        if (!t.bounced) {
+          t.bounced = true
+          t.bounceT = 0
+        }
+      } else if (!t.broken) {
         t.broken = true
+        t.trapT = 0
         playWallBreak()
       }
     }
