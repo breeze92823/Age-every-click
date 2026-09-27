@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { BoxGeometry, CanvasTexture, MeshStandardMaterial, SRGBColorSpace } from 'three'
+import { BoxGeometry, CanvasTexture, Color, MeshStandardMaterial, SRGBColorSpace } from 'three'
 import { MATERIAL_PBR } from '../data/materials.js'
 import { GROUND_Y } from '../data/world.js'
 import {
@@ -14,6 +14,12 @@ import {
   EXIT_PAD,
   FINISH_PAD,
   REWARD_COINS,
+  SAFE_BOUNCE_DURATION,
+  SAFE_BOUNCE_HEIGHT,
+  UNSAFE_SHRINK_DURATION,
+  UNSAFE_SHRINK_SCALE,
+  UNSAFE_REGROW_DURATION,
+  UNSAFE_RESET_DELAY,
 } from '../data/bonusBridge.js'
 import { makeStudTexture } from '../systems/studTexture.js'
 import { makeLabelTexture } from '../systems/canvasTextures.js'
@@ -99,9 +105,14 @@ function buildAssets() {
 
   const glassTop = keep(studMaterial('#ff3fe0', '#f736d7', TILE_SIZE, TILE_SIZE))
   const glassSide = keep(new MeshStandardMaterial({ color: '#d61fb8', ...MATERIAL_PBR.PROP }))
+  keep(glassTop.map)
+
+  // Revealed-safe look: the same stud texture/material setup as the pink
+  // glass tile (same TILE_SIZE-scaled repeat, same PROP roughness class),
+  // just green instead of magenta — not the Start platform's own material,
+  // which is scaled for its much larger footprint.
   const safeTop = keep(studMaterial('#6fe36b', '#66d962', TILE_SIZE, TILE_SIZE))
   const safeSide = keep(new MeshStandardMaterial({ color: '#3fb03f', ...MATERIAL_PBR.PROP }))
-  keep(glassTop.map)
   keep(safeTop.map)
 
   const translucent = { transparent: true, opacity: 0.8, ...MATERIAL_PBR.GLASS }
@@ -121,10 +132,12 @@ function buildAssets() {
     tileGeometry,
     tileMaterials: {
       glass: boxFaces(glassTop, glassSide),
-      revealed: boxFaces(safeTop, safeSide),
       arrow: boxFaces(arrowTop, arrowSide),
       cross: boxFaces(crossTop, crossSide),
     },
+    // A revealed-safe glass tile swaps to this (not a colour tint) — same
+    // stud texture/material style as the pink glass tile, just green.
+    safeFaces: boxFaces(safeTop, safeSide),
   }
 }
 
@@ -181,19 +194,76 @@ function GlassFrame() {
   )
 }
 
+// Safe hop: ease-out rise for the first slice of the tween, then a
+// decaying-sine "spring" settle back through rest — one continuous curve,
+// no library. Fraction of the duration spent rising vs settling:
+const BOUNCE_RISE_FRAC = 0.3
+function bounceOffset(t) {
+  const p = Math.min(1, t / SAFE_BOUNCE_DURATION)
+  if (p < BOUNCE_RISE_FRAC) {
+    const u = p / BOUNCE_RISE_FRAC
+    return SAFE_BOUNCE_HEIGHT * (1 - (1 - u) * (1 - u)) // ease-out quad, 0 -> peak
+  }
+  const u = (p - BOUNCE_RISE_FRAC) / (1 - BOUNCE_RISE_FRAC)
+  return SAFE_BOUNCE_HEIGHT * Math.exp(-5 * u) * Math.cos(u * Math.PI * 2.2) // decaying wobble back to 0
+}
+
+// Unsafe trap: quick shrink to UNSAFE_SHRINK_SCALE, a held "sprung" plateau
+// with collision off (see systems/bonusBridge.js's supports()), then a tween
+// back to full scale as it re-arms.
+const REGROW_START = UNSAFE_RESET_DELAY - UNSAFE_REGROW_DURATION
+function trapScale(t) {
+  if (t < UNSAFE_SHRINK_DURATION) {
+    const u = t / UNSAFE_SHRINK_DURATION
+    return 1 - (1 - UNSAFE_SHRINK_SCALE) * u
+  }
+  if (t < REGROW_START) return UNSAFE_SHRINK_SCALE
+  const u = (t - REGROW_START) / UNSAFE_REGROW_DURATION
+  return UNSAFE_SHRINK_SCALE + (1 - UNSAFE_SHRINK_SCALE) * u
+}
+
+const WHITE = new Color('#ffffff')
+const UNSAFE_FLASH = new Color('#ff3b3b')
+const tmpColor = new Color()
+
 function Tiles({ assets }) {
   const meshes = useRef([])
+  // Only the top face's colour ever changes, so only it needs its own clone
+  // per tile — sharing assets.tileMaterials's top material across tiles
+  // would make one tile's colour flash bleed onto every tile of that kind.
+  // The 5 side faces stay pointed at the shared material (owned/disposed by
+  // buildAssets already).
+  const materials = useMemo(
+    () => tiles.map((t) => assets.tileMaterials[t.kind].map((m, i) => (i === 2 ? m.clone() : m))),
+    [assets],
+  )
+  useEffect(() => () => materials.forEach((faces) => faces[2].dispose()), [materials])
+
   useFrame(() => {
     for (let i = 0; i < tiles.length; i++) {
       const mesh = meshes.current[i]
       if (!mesh) continue
       const t = tiles[i]
-      mesh.visible = t.fall < 30
-      mesh.position.y = GROUND_Y - TILE_THICKNESS / 2 - t.fall
-      mesh.rotation.x = t.fall * 0.08
-      mesh.rotation.z = t.fall * (t.lane === 0 ? -0.05 : 0.05)
-      const kind = t.kind === 'glass' && t.revealed ? 'revealed' : t.kind
-      mesh.material = assets.tileMaterials[kind]
+      const top = materials[i][2] // BoxGeometry's +Y face, per boxFaces()'s ordering
+
+      if (t.bounceT != null) {
+        mesh.position.y = GROUND_Y - TILE_THICKNESS / 2 + bounceOffset(t.bounceT)
+      } else {
+        mesh.position.y = GROUND_Y - TILE_THICKNESS / 2
+      }
+      // Once confirmed safe, a glass tile swaps to the dedicated green
+      // material (not a colour tint) and stays that way — unlike the hop
+      // itself (one-shot), only resetBonusBridge() (falling off or timing
+      // out) clears `bounced` and reverts it to the plain magenta look.
+      mesh.material = t.kind === 'glass' && t.bounced ? assets.safeFaces : materials[i]
+
+      if (t.trapT != null) {
+        mesh.scale.setScalar(trapScale(t.trapT))
+        top.color.copy(t.trapT < REGROW_START ? UNSAFE_FLASH : tmpColor.copy(UNSAFE_FLASH).lerp(WHITE, (t.trapT - REGROW_START) / UNSAFE_REGROW_DURATION))
+      } else {
+        mesh.scale.setScalar(1)
+        top.color.copy(WHITE)
+      }
     }
   })
   return tiles.map((t, i) => (
@@ -201,7 +271,7 @@ function Tiles({ assets }) {
       key={i}
       ref={(m) => (meshes.current[i] = m)}
       geometry={assets.tileGeometry}
-      material={assets.tileMaterials[t.kind]}
+      material={materials[i]}
       position={[t.x, GROUND_Y - TILE_THICKNESS / 2, t.z]}
       castShadow
       receiveShadow
