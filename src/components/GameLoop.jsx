@@ -5,6 +5,7 @@ import { update as updateCamera } from '../systems/cameraOrbit.js'
 import { step as stepActionPopups } from '../systems/actionPopups.js'
 import { notifyFirstFrame } from '../systems/bloxity.js'
 import { stepAfkZone } from '../systems/area2.js'
+import { reportLocal } from '../systems/net.js'
 import { useGameStore } from '../store/useGameStore.js'
 
 // The single simulation tick. Rendered before the view components so its
@@ -15,6 +16,8 @@ export default function GameLoop() {
   useFrame(() => {
     const dt = tick()
     step(dt)
+    // Throttled inside reportLocal() itself; a no-op while offline.
+    reportLocal(dt)
     // No-ops unless the player is riding an Age Machine.
     useGameStore.getState().tickAgeMachine(dt)
     // Area 2's AFK zone: pays coins on a timer while the player stands in it.

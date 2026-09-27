@@ -229,7 +229,7 @@ const TOOLBAR_TILES = {
   blue: ['#5ec8ff', '#1f8fe0', '#0d3f73'],
 }
 
-function ToolbarButton({ icon, label, onClick, isTouch, tile }) {
+function ToolbarButton({ icon, iconUrl, label, onClick, isTouch, tile }) {
   const colors = tile ? TOOLBAR_TILES[tile] : null
   const tileStyle = colors
     ? {
@@ -254,17 +254,27 @@ function ToolbarButton({ icon, label, onClick, isTouch, tile }) {
         colors ? 'rounded-xl' : 'rounded-lg'
       } ${isTouch ? (colors ? 'h-16 w-16' : 'h-12 w-12') : colors ? 'h-28 w-28' : 'h-20 w-20'}`}
     >
-      <span
-        className="leading-none"
-        style={{
-          fontSize: isTouch ? '2.25rem' : '3rem',
-          WebkitTextStroke: '5px black',
-          paintOrder: 'stroke fill',
-          filter: 'brightness(1.35) saturate(1.3) drop-shadow(0 0 6px rgba(255,255,255,0.5))',
-        }}
-      >
-        {icon}
-      </span>
+      {iconUrl ? (
+        <img
+          src={iconUrl}
+          alt=""
+          draggable={false}
+          className={isTouch ? 'h-9 w-9' : 'h-12 w-12'}
+          style={{ filter: 'drop-shadow(0 0 6px rgba(255,255,255,0.5))' }}
+        />
+      ) : (
+        <span
+          className="leading-none"
+          style={{
+            fontSize: isTouch ? '2.25rem' : '3rem',
+            WebkitTextStroke: '5px black',
+            paintOrder: 'stroke fill',
+            filter: 'brightness(1.35) saturate(1.3) drop-shadow(0 0 6px rgba(255,255,255,0.5))',
+          }}
+        >
+          {icon}
+        </span>
+      )}
       <span
         className="font-semibold leading-none tracking-wide"
         style={{
@@ -447,14 +457,14 @@ function LeftCenterControls() {
     <div className="flex flex-col items-center gap-2">
       <div className={rowClassName}>
         <ToolbarButton
-          icon="⭐"
+          iconUrl="/ui/rebirth.png"
           label="Rebirth"
           tile="pink"
           onClick={() => setOpenWindow('rebirth')}
           isTouch={isTouch}
         />
         <ToolbarButton
-          icon="🛒"
+          iconUrl="/ui/shop.png"
           label="Shop"
           tile="green"
           onClick={() => setOpenWindow('shop')}

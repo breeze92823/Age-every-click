@@ -58,6 +58,15 @@ export const SOLO_NOTICE_AFTER_ATTEMPT = 2
 // leaderboard only needs a roughly-current rank, not a per-click packet.
 export const STATS_RESEND_DEBOUNCE_MS = 1_000
 
+// How often systems/net.js's reportLocal() may send a fresh `move` packet
+// (position/yaw/moveBlend) to the room — a remote player's walk needs to
+// read as continuous, so this is far tighter than the stats/progress
+// debounces above, but still throttled well under per-physics-frame so an
+// actively-moving player doesn't flood the socket. reportLocal() also skips
+// a send outright when nothing has changed since the last one (e.g. an idle
+// player), so this is a ceiling, not a fixed-rate tick.
+export const MOVE_SEND_INTERVAL_MS = 80
+
 // Debounce on re-sending the signed-in player's durable save (server's
 // Mongo `players` collection, via IslandRoom.ts's `saveProgress`) — longer
 // than STATS_RESEND_DEBOUNCE_MS since this hits Mongo, not just an
