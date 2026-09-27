@@ -4,16 +4,32 @@
 // built so a slow, asleep, or absent server leaves the game fully playable
 // solo: nothing here blocks gameplay, and the scene never waits on a socket.
 //
-// Ported down from Ice-Skate's own systems/net.js, trimmed of position/avatar
-// relay and remote-player rendering — this template has no remote-player
-// component (components/Player.jsx only ever draws the local player), so the
-// server's `move`/`setAvatar` messages are simply never sent. What's left is
-// exactly what components/IslandLandmarks.jsx's two leaderboard boards (Top
-// Coins/Top Age) and cross-session save/load need: identity, live stats,
-// durable progress, and the merged global leaderboard.
-import { authState, subscribeAuth, getStableUserId } from './bloxity.js'
+// Ported down from Ice-Skate's own systems/net.js. Restores position/avatar
+// relay and remote-player rendering: reportLocal() below (called every frame
+// from components/GameLoop.jsx) throttles the local player's position/yaw/
+// moveBlend out over `move`, sendAvatarNow() mirrors the same
+// gender/outfit/equipped/proportions components/Player.jsx renders locally
+// out over `setAvatar`, and subscribeRoster() lets components/
+// RemotePlayers.jsx mount one character per other connected session and read
+// its live position/avatar straight off the synced PlayerState instance.
+// Also covers what components/IslandLandmarks.jsx's two leaderboard boards
+// (Top Coins/Top Age) and cross-session save/load need: identity, live
+// stats, durable progress, and the merged global leaderboard.
+import {
+  authState,
+  subscribeAuth,
+  getStableUserId,
+  getDisplayName,
+  getEquippedAvatar,
+  getProportions,
+  onAvatarChanged,
+  onProportionsChanged,
+} from './bloxity.js'
+import { DEV_MODE } from '../data/bloxity.js'
 import { useGameStore } from '../store/useGameStore.js'
 import { claimLocalFreeSpin } from './freeSpin.js'
+import { player } from './playerState.js'
+import { outfitForLevel } from './defaultCharacter.js'
 import {
   SERVER_URL,
   ROOM_NAME,
@@ -22,6 +38,7 @@ import {
   SOLO_NOTICE_AFTER_ATTEMPT,
   STATS_RESEND_DEBOUNCE_MS,
   PROGRESS_RESEND_DEBOUNCE_MS,
+  MOVE_SEND_INTERVAL_MS,
   USERNAME_WAIT_MS,
 } from '../data/net.js'
 
@@ -63,6 +80,49 @@ function setStatus(status) {
   emit()
 }
 
+// --- Remote players -----------------------------------------------------
+// sessionId -> the OTHER player's live PlayerState schema instance (never
+// our own — see the selfId filter everywhere this is populated). Colyseus
+// patches each instance's fields in place as updates arrive, so a consumer
+// can read e.g. `p.x`/`p.avatar` straight off it every frame with no
+// callback needed; only the add/remove event itself needs one (below),
+// since a rendering component (components/RemotePlayers.jsx) needs to know
+// when to mount/unmount a character, not just when its fields change.
+const remotePlayers = new Map()
+const rosterListeners = new Set()
+
+function notifyRosterAdd(sessionId, p) {
+  for (const l of rosterListeners) {
+    try {
+      l.onAdd(sessionId, p)
+    } catch {
+      // A broken subscriber must not wedge the netcode.
+    }
+  }
+}
+
+function notifyRosterRemove(sessionId) {
+  for (const l of rosterListeners) {
+    try {
+      l.onRemove(sessionId)
+    } catch {
+      // A broken subscriber must not wedge the netcode.
+    }
+  }
+}
+
+// components/RemotePlayers.jsx's one hook into this module: mount a
+// character per other connected session. Replays the current roster
+// immediately so a subscriber that mounts after we're already online (the
+// common case — React mounts after init()'s connect() has resolved) doesn't
+// miss whoever's already here.
+export function subscribeRoster(onAdd, onRemove) {
+  const entry = { onAdd, onRemove }
+  rosterListeners.add(entry)
+  for (const [sessionId, p] of remotePlayers) onAdd(sessionId, p)
+  return () => rosterListeners.delete(entry)
+}
+
 // --- Connection machine -------------------------------------------------
 let sdkModule = null
 let client = null
@@ -88,11 +148,7 @@ async function loadSdk() {
 }
 
 function currentUsername() {
-  // Signed-in account, else Bloxity's generated guest identity ("bear5" …),
-  // matching the HUD identity chip. Plain "Guest" only if neither exists.
-  const u = authState.user || authState.guest
-  const name = u && (u.displayName || u.username || u.name)
-  return typeof name === 'string' && name.trim() ? name.trim().slice(0, 64) : 'Guest'
+  return getDisplayName()
 }
 
 // --- Stats sync ---------------------------------------------------------
@@ -227,6 +283,87 @@ function onLocalStoreChangeProgress(state) {
 // writes it back over Mongo regardless.
 let hydratedFromServer = false
 
+// --- Avatar + position relay (remote-player rendering) ----------------------
+// The same shape components/Player.jsx renders the LOCAL player from — the
+// game's own default character (gender + outfit for the current Age level),
+// dressed with a signed-in player's equipped Bloxity hat/back accessory and
+// SDK proportions. Sent as an opaque JSON string (server never parses it —
+// IslandRoom.ts's PlayerState.avatar, same convention as the original
+// Ice-Skate payload), so components/RemotePlayers.jsx can rebuild an
+// identical-looking character for every other connected session.
+function avatarPayload() {
+  const s = useGameStore.getState()
+  return {
+    gender: s.gender ?? 'boy',
+    outfit: outfitForLevel(s.level),
+    // Same gate as Player.jsx's useBloxityAvatar: only a real signed-in
+    // player (never a dev-mode stub) shows Bloxity accessories.
+    equipped: authState.user && !DEV_MODE ? getEquippedAvatar() : null,
+    proportions: getProportions(),
+  }
+}
+
+let lastSentAvatar = ''
+
+function sendAvatarNow() {
+  if (!room) return
+  const payload = JSON.stringify(avatarPayload())
+  if (payload === lastSentAvatar) return
+  lastSentAvatar = payload
+  try {
+    room.send('setAvatar', { avatar: payload })
+  } catch {
+    // Socket mid-close — the next attach re-seeds via join options anyway.
+  }
+}
+
+// Last level/gender we already triggered a resend for — useGameStore.subscribe
+// fires on every store change, same filtering need as lastScheduledStats.
+let lastAvatarTrigger = { level: undefined, gender: undefined }
+
+function onLocalStoreChangeAvatar(state) {
+  if (state.level !== lastAvatarTrigger.level || state.gender !== lastAvatarTrigger.gender) {
+    lastAvatarTrigger = { level: state.level, gender: state.gender }
+    sendAvatarNow()
+  }
+}
+
+// Local player's position/facing/gait, throttled out over `move` — read
+// straight off the playerState.js singleton every frame (components/
+// GameLoop.jsx calls this after systems/playerMovement.js's step()), same
+// "no per-frame packet" restraint as the debounced stats/progress sends
+// above, just on a tighter ceiling since a walk needs to read as continuous
+// on every other client. A no-op while offline.
+let moveAccumMs = 0
+let lastSentMove = null
+const MOVE_EPS = 0.01
+
+export function reportLocal(delta) {
+  if (!room) return
+  moveAccumMs += delta * 1000
+  if (moveAccumMs < MOVE_SEND_INTERVAL_MS) return
+  moveAccumMs = 0
+
+  const speed01 = Math.min(1, Math.hypot(player.velocity.x, player.velocity.z) / player.moveSpeed)
+  const next = { x: player.position.x, y: player.position.y, z: player.position.z, yaw: player.facing, moveBlend: speed01 }
+  if (
+    lastSentMove &&
+    Math.abs(next.x - lastSentMove.x) < MOVE_EPS &&
+    Math.abs(next.y - lastSentMove.y) < MOVE_EPS &&
+    Math.abs(next.z - lastSentMove.z) < MOVE_EPS &&
+    Math.abs(next.yaw - lastSentMove.yaw) < MOVE_EPS &&
+    Math.abs(next.moveBlend - lastSentMove.moveBlend) < MOVE_EPS
+  ) {
+    return
+  }
+  lastSentMove = next
+  try {
+    room.send('move', next)
+  } catch {
+    // Socket mid-close — harmless, the next tick tries again.
+  }
+}
+
 // --- Lucky Wheel free spin --------------------------------------------------
 // The daily free spin's 24h cooldown is checked and stamped by the SERVER for a
 // signed-in player (IslandRoom.ts's claimFreeSpin), so it survives reloads and
@@ -293,6 +430,11 @@ function sendIdentityNow() {
   } catch {
     // Socket mid-close — the next attach re-seeds via join options anyway.
   }
+  // Signing in/out flips avatarPayload()'s equipped gate (only a real
+  // signed-in player shows Bloxity accessories) — resend so every other
+  // client's rendering of us picks that up immediately rather than on
+  // whatever's next scheduled.
+  sendAvatarNow()
 }
 
 // Resolve once auth has settled, so a signed-in player joins under their real
@@ -347,6 +489,11 @@ async function connect() {
         // Empty string for a guest — IslandRoom.ts's onJoin treats a falsy
         // userId as "nothing to load/save", same as every other field here.
         userId: getStableUserId(),
+        // Seeds IslandRoom.ts's onJoin -> PlayerState.avatar, so any client
+        // already in the room renders us correctly from the very first frame
+        // instead of a flash of the default outfit until our first
+        // `setAvatar` round-trips.
+        avatar: JSON.stringify(avatarPayload()),
       }),
       JOIN_TIMEOUT_MS,
       'join timed out',
@@ -430,19 +577,47 @@ function attachRoom(joined) {
     emit()
   })
 
-  // The roster only changes on join/leave (no `move` relay in this
-  // template), so listening for those directly is enough to keep
-  // netState.playerCount current — no per-frame polling needed.
-  if (room.state && room.state.players) {
-    room.state.players.onAdd(() => recount())
-    room.state.players.onRemove(() => recount())
-  }
+  // Raw MapSchema has no .onAdd/.onRemove of its own (those only exist on
+  // the callback-proxy view) — this room's own live PlayerState objects are
+  // still read directly off room.state.players.get(sessionId) every frame
+  // (position/avatar fields patch in place), $() is only needed for the
+  // join/leave *events* below.
+  //
+  // room.state can still be an empty shell for a moment right after
+  // joinOrCreate() resolves — the full state patch (players included) lands
+  // slightly later over the socket, not synchronously with the join.
+  // getStateCallbacks()'s proxy handles that itself (it defers registration
+  // until the `players` map instance actually arrives), but only if it's
+  // called unconditionally here — an `if (room.state.players)` guard around
+  // this would skip registering the callback entirely during that window,
+  // and it would then never fire for anyone for the rest of the session.
+  const $ = sdkModule.getStateCallbacks(room)
+  $(room.state).players.onAdd((p, sessionId) => {
+    recount()
+    if (sessionId === selfId) return
+    remotePlayers.set(sessionId, p)
+    notifyRosterAdd(sessionId, p)
+  })
+  $(room.state).players.onRemove((p, sessionId) => {
+    recount()
+    if (sessionId === selfId) return
+    remotePlayers.delete(sessionId)
+    notifyRosterRemove(sessionId)
+  })
 
   // Same reasoning as scheduleStatsResend: a fresh session starts every
   // field at its schema default (0), so a rejoin needs its current
   // speed/coins/rebirth re-stated immediately rather than waiting for the
   // next store change.
   sendStatsNow()
+  // Ditto for avatar — force a resend even if it's byte-identical to
+  // whatever we last sent on a prior connection (a fresh room has none of
+  // that; join options already carried the seed, but a slow join can still
+  // race an early setAvatar before the room finishes handshaking).
+  lastSentAvatar = ''
+  sendAvatarNow()
+  lastSentMove = null
+  moveAccumMs = MOVE_SEND_INTERVAL_MS // send the very next reportLocal() tick
   // The join options already carried whatever identity was true the instant
   // we connected — seed lastIdentity to match so sendIdentityNow() (fired
   // from the subscribeAuth callback below) only resends on a REAL change
@@ -461,6 +636,12 @@ function handleLeave() {
   // Stale rows from the last session shouldn't linger on the boards while
   // we're disconnected/retrying; the next attach's first broadcast refills this.
   globalLeaderboard = { speed: [], coins: [], rebirth: [] }
+  // Every remote character mounted by components/RemotePlayers.jsx belongs
+  // to a session on the room we just lost — drop them all rather than leave
+  // stale bodies standing around until a fresh attach's onAdd events happen
+  // to replace each one.
+  for (const sessionId of remotePlayers.keys()) notifyRosterRemove(sessionId)
+  remotePlayers.clear()
 
   if (stopped) return
   attempt = 0
@@ -471,6 +652,9 @@ function handleLeave() {
 let offStats = null
 let offProgress = null
 let offIdentity = null
+let offAvatarStore = null
+let offAvatarChanged = null
+let offProportionsChanged = null
 
 export function init() {
   if (started) return
@@ -494,6 +678,13 @@ export function init() {
   // fires on friends/balance loads, not just identity changes;
   // sendIdentityNow()'s own diff check is what filters those out.
   if (!offIdentity) offIdentity = subscribeAuth(() => sendIdentityNow())
+  // Whatever changes avatarPayload()'s output -> the room, so every other
+  // client's rendering of us stays accurate: an Age-level outfit change or a
+  // gender pick, an equip/unequip in the Bloxity customizer, or an edited
+  // proportions slider.
+  if (!offAvatarStore) offAvatarStore = useGameStore.subscribe(onLocalStoreChangeAvatar)
+  if (!offAvatarChanged) offAvatarChanged = onAvatarChanged(() => sendAvatarNow())
+  if (!offProportionsChanged) offProportionsChanged = onProportionsChanged(() => sendAvatarNow())
   waitForAuth(USERNAME_WAIT_MS).then(() => {
     if (!stopped) connect()
   })
@@ -520,6 +711,22 @@ export function teardown() {
     offIdentity()
     offIdentity = null
   }
+  if (offAvatarStore) {
+    offAvatarStore()
+    offAvatarStore = null
+  }
+  if (offAvatarChanged) {
+    offAvatarChanged()
+    offAvatarChanged = null
+  }
+  if (offProportionsChanged) {
+    offProportionsChanged()
+    offProportionsChanged = null
+  }
+  // Every remote character mounted by components/RemotePlayers.jsx belongs
+  // to this room — same reasoning as handleLeave()'s own clear.
+  for (const sessionId of remotePlayers.keys()) notifyRosterRemove(sessionId)
+  remotePlayers.clear()
   // Final best-effort save before the socket closes — a page unload can't
   // wait on PROGRESS_RESEND_DEBOUNCE_MS, and room.send() is fire-and-forget
   // (no ack needed) so this never delays the leave() right after it.

@@ -138,6 +138,18 @@ export function getStableUserId() {
   return typeof id === 'string' && id ? id : ''
 }
 
+// Signed-in account's display name, else Bloxity's generated guest identity
+// ("bear5" …), matching the HUD identity chip. Plain "Guest" only if
+// neither exists. Shared by systems/net.js (multiplayer identity, sent as
+// `username` — the same value this returns) and components/Nametag.jsx (the
+// local player's own floating name/Age tag), so every player is labelled
+// the same name everywhere they appear.
+export function getDisplayName() {
+  const u = authState.user || authState.guest
+  const name = u && (u.displayName || u.username || u.name)
+  return typeof name === 'string' && name.trim() ? name.trim().slice(0, 64) : 'Guest'
+}
+
 function onUser() {
   const SDK = sdk()
   const user = SDK ? SDK.auth.getUser() : null

@@ -10,6 +10,7 @@ import BonusScene from './components/BonusScene.jsx'
 import StudJumpsScene from './components/StudJumpsScene.jsx'
 import TsunamiScene from './components/TsunamiScene.jsx'
 import Player from './components/Player.jsx'
+import RemotePlayers from './components/RemotePlayers.jsx'
 import Hud from './components/hud/Hud.jsx'
 import LoadingScreen from './components/LoadingScreen.jsx'
 import { useGameStore } from './store/useGameStore.js'
@@ -73,6 +74,10 @@ export default function App() {
           {currentScene === 'tsunami' && <TsunamiScene />}
         </Suspense>
         <Player />
+        {/* Other sessions in the shared island room only — bonus/studJumps/
+            tsunami are each player's own personal instance, so another
+            player's world position there has nothing to render alongside. */}
+        {onIsland && <RemotePlayers />}
       </Canvas>
       <Hud />
       <LoadingScreen />
