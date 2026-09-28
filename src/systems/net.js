@@ -239,6 +239,7 @@ function progressPayload() {
     spins: s.spins,
     speedCoil: s.speedCoil,
     wheelSpins: s.wheelSpins,
+    tutorialStep: s.tutorialStep,
   }
 }
 
@@ -286,6 +287,7 @@ function onLocalStoreChangeProgress(state) {
     state.spins,
     state.speedCoil,
     state.wheelSpins,
+    state.tutorialStep,
   ])
   if (snap !== lastScheduledProgress) {
     lastScheduledProgress = snap

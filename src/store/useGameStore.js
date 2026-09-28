@@ -106,8 +106,21 @@ export const useGameStore = create((set, get) => ({
   // leaves it alone, so it is asked again on each load.
   gender: null,
 
+  // systems/tutorial.js's onboarding progress: the index of the STEPS entry
+  // the player is currently on, or STEPS.length once every step is done.
+  // Durable (net.js's progressPayload()/hydrate()) so a signed-in player who
+  // quits mid-onboarding resumes at the same step next time instead of
+  // replaying it from scratch or being skipped outright just for having a
+  // save. resetProgress() puts it back to 0 too — a logged-out guest session
+  // has nothing durable behind it, so it should read as brand-new again.
+  tutorialStep: 0,
+
   setGender(gender) {
     set({ gender })
+  },
+
+  setTutorialStep(tutorialStep) {
+    set({ tutorialStep })
   },
 
   openWheel() {
@@ -365,6 +378,7 @@ export const useGameStore = create((set, get) => ({
         wheelSpins: 0,
         freeSpinReadyAt: readLocalFreeSpinReadyAt(),
         ageBoostUntil: 0,
+        tutorialStep: 0,
       }),
     )
   },
@@ -393,6 +407,12 @@ export const useGameStore = create((set, get) => ({
       const freeSpinReadyAt = Number.isFinite(saved.freeSpinInMs)
         ? Date.now() + Math.max(0, saved.freeSpinInMs)
         : s.freeSpinReadyAt
+      // No upper clamp: systems/tutorial.js treats any index past its STEPS
+      // array (including this field's own "done" sentinel, STEPS.length) as
+      // finished, so a stray larger number is already handled correctly.
+      const tutorialStep = Number.isFinite(saved.tutorialStep)
+        ? Math.max(0, Math.floor(saved.tutorialStep))
+        : s.tutorialStep
       const tier = HEX_SPEED_PAD_TIERS[equippedHexPad]
       return derive({
         ...s,
@@ -409,6 +429,7 @@ export const useGameStore = create((set, get) => ({
         speedCoil,
         wheelSpins,
         freeSpinReadyAt,
+        tutorialStep,
       })
     })
   },

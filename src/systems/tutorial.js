@@ -16,11 +16,15 @@ const REBIRTH_ARROW_ROTATION_DEG = -50
 // New-player onboarding: a fixed sequence of TutorialHint copy + optional
 // ObjectiveArrow targets, each step advancing on a real game event (a click,
 // an Age milestone, finishing an obby, owning/using the Basic Age Machine, a
-// first rebirth). No skip/back — this is a one-way path for brand-new
-// sessions. "New player" == a guest, or a signed-in player with no existing
-// save — install() below gates step 0 on systems/net.js's onProgressResolved()
-// so a returning player who already has progress never sees it. It simply
-// runs once per page load and finishes once step 6 completes.
+// first rebirth). No skip/back — this is a one-way path. The current step is
+// durable (store/useGameStore.js's tutorialStep, synced like the rest of a
+// signed-in player's save via systems/net.js), so a player who quits
+// mid-onboarding resumes at the same step next time instead of replaying it
+// from scratch or being skipped outright just for having a save — install()
+// below waits on net.js's onProgressResolved() so a returning player's saved
+// step (if any) has already hydrated before it enters that step. A guest, a
+// fresh signed-in save, or a session where no save could be checked in time
+// all just resume at step 0, same as a brand-new player.
 const BASIC_AGE_MACHINE_INDEX = 0
 
 const OBBY_TARGET = { x: OBBY.x * ISLAND_SCALE-3, z: OBBY.signZ * ISLAND_SCALE+15 }
@@ -63,6 +67,11 @@ let stepIndex = -1
 
 function enterStep(i) {
   stepIndex = i
+  // Persist so a reload/reconnect resumes here instead of restarting — see
+  // this module's own top comment. A no-op resend for a guest or an
+  // unchanged value (net.js's onLocalStoreChangeProgress diffs before
+  // scheduling a save).
+  useGameStore.getState().setTutorialStep(i)
   const step = STEPS[i]
   if (!step) {
     // Past the last step — onboarding's done.
@@ -84,11 +93,13 @@ export function install() {
   if (installed) return
   installed = true
 
-  // Only start onboarding once we know this session has no existing save to
-  // hydrate — see onProgressResolved()'s own comment for the guest/timeout
-  // fallbacks that keep this from stalling a genuinely new player's tutorial.
-  onProgressResolved((hasExistingProgress) => {
-    if (!hasExistingProgress) enterStep(0)
+  // Wait for a possible existing save to hydrate (see onProgressResolved()'s
+  // own comment for the guest/timeout fallbacks that keep this from stalling
+  // a genuinely new player) before reading tutorialStep — a returning
+  // player's saved step, if any, is already on the store by the time this
+  // fires. Defaults to 0 for a guest, a fresh save, or an unresolved check.
+  onProgressResolved(() => {
+    enterStep(useGameStore.getState().tutorialStep)
   })
 
   onClickGain(() => {
