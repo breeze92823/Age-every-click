@@ -86,6 +86,17 @@ export const PROGRESS_RESEND_DEBOUNCE_MS = 3_000
 // network round-trip.
 export const USERNAME_WAIT_MS = 8_000
 
+// How long systems/net.js waits, from page load, before concluding there's
+// no existing save to hydrate (systems/tutorial.js's onProgressResolved() —
+// gates whether the first-run tutorial shows at all). Covers a confirmed
+// guest, a build with no server configured, and a signed-in player whose
+// join or Mongo doc lookup is slow. Bounded well under JOIN_TIMEOUT_MS/
+// USERNAME_WAIT_MS's own worst case so a genuinely new player's tutorial
+// never stalls on a cold host boot; the rare returning player caught by a
+// slower-than-this join just sees the tutorial once more than needed, which
+// is harmless.
+export const PROGRESS_KNOWN_TIMEOUT_MS = 12_000
+
 // How many ranked rows components/IslandLandmarks.jsx's leaderboard boards
 // poll for and draw — matches the board texture's originally-authored
 // placeholder roster length (data/island.js's old static LEADERBOARDS

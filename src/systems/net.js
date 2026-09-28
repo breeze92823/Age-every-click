@@ -40,6 +40,7 @@ import {
   PROGRESS_RESEND_DEBOUNCE_MS,
   MOVE_SEND_INTERVAL_MS,
   USERNAME_WAIT_MS,
+  PROGRESS_KNOWN_TIMEOUT_MS,
 } from '../data/net.js'
 
 // --- Public state -----------------------------------------------------------
@@ -238,6 +239,7 @@ function progressPayload() {
     spins: s.spins,
     speedCoil: s.speedCoil,
     wheelSpins: s.wheelSpins,
+    tutorialStep: s.tutorialStep,
   }
 }
 
@@ -285,6 +287,7 @@ function onLocalStoreChangeProgress(state) {
     state.spins,
     state.speedCoil,
     state.wheelSpins,
+    state.tutorialStep,
   ])
   if (snap !== lastScheduledProgress) {
     lastScheduledProgress = snap
@@ -292,14 +295,59 @@ function onLocalStoreChangeProgress(state) {
   }
 }
 
-// Applied at most once per page session: the FIRST successful attach's
-// `progress` message is the real load from this player's save. A later
-// reattach (a full drop + fresh joinOrCreate, not the SDK's own buffered
-// reconnection) would otherwise re-fetch a possibly-stale Mongo snapshot and
-// clobber whatever the player did locally during the blip — our own store is
-// already the source of truth by then, and the next scheduled saveProgress
-// writes it back over Mongo regardless.
+// Applied at most once per IDENTITY, not once per page session: the first
+// `progress` message under the current sign-in state is the real load from
+// that account's save. A later reattach under the SAME identity (a full drop
+// + fresh joinOrCreate, not the SDK's own buffered reconnection) would
+// otherwise re-fetch a possibly-stale Mongo snapshot and clobber whatever the
+// player did locally during the blip — our own store is already the source
+// of truth by then, and the next scheduled saveProgress writes it back over
+// Mongo regardless. sendIdentityNow() below resets this back to false on a
+// REAL identity change (guest -> signed-in, or a different account), since
+// that genuinely is a different save to load — see resolveProgress()'s own
+// comment for why the tutorial-resume signal needs that second load too.
 let hydratedFromServer = false
+
+// --- New-vs-returning player signal (systems/tutorial.js) -------------------
+// Tells every listener whether this session has an existing saved doc: true
+// whenever the `progress` message actually arrives below (IslandRoom.ts's
+// loadProgress only ever sends one when a doc was found — a brand-new
+// account just leaves the client on defaults and sends nothing), false once
+// we've given up waiting for one with nothing found yet (see
+// PROGRESS_KNOWN_TIMEOUT_MS and the confirmed-guest check in init() below).
+// systems/tutorial.js uses this to resume onboarding at the right saved step
+// (or hide it entirely for someone already past it) without ever blocking a
+// genuinely new player's tutorial on a slow or absent connection.
+//
+// NOT a one-shot resolve: a `false` conclusion only ever reflects "nothing
+// found YET", so it must never suppress a real `true` that shows up later —
+// e.g. a guest who signs into Bloxity mid-session (sendIdentityNow() below
+// resets hydratedFromServer for exactly this case) and turns out to already
+// have a save. `false` itself still only fires once, so an already-confirmed
+// guest or an already-elapsed timeout doesn't keep re-announcing "still
+// nothing" every time something else calls resolveProgress(false).
+let progressKnownOnce = false
+const progressResolvedListeners = new Set()
+
+function resolveProgress(hasExisting) {
+  if (!hasExisting && progressKnownOnce) return
+  progressKnownOnce = true
+  for (const fn of progressResolvedListeners) {
+    try {
+      fn(hasExisting)
+    } catch {
+      // A broken subscriber must not wedge the netcode.
+    }
+  }
+}
+
+// No replay for a late subscriber — systems/tutorial.js is this module's
+// only consumer and subscribes at page-load time, well before anything here
+// can have resolved yet.
+export function onProgressResolved(fn) {
+  progressResolvedListeners.add(fn)
+  return () => progressResolvedListeners.delete(fn)
+}
 
 // --- Avatar + position relay (remote-player rendering) ----------------------
 // The same shape components/Player.jsx renders the LOCAL player from — the
@@ -594,6 +642,7 @@ function attachRoom(joined) {
     if (hydratedFromServer) return
     hydratedFromServer = true
     useGameStore.getState().hydrate(msg)
+    resolveProgress(true)
   })
 
   // Reply to requestFreeSpin() below.
@@ -694,6 +743,10 @@ export function init() {
   if (started) return
   started = true
   stopped = false
+  // Ceiling on the new-vs-returning signal above — fires unconditionally so
+  // it also covers the `!SERVER_URL` early return right below (no backend at
+  // all means no way to ever confirm existing progress).
+  setTimeout(() => resolveProgress(false), PROGRESS_KNOWN_TIMEOUT_MS)
   // No server configured for this build (see data/net.js's SERVER_URL_MAIN)
   // — stay 'idle' forever, exactly like the old stub. Every other export
   // below already no-ops without a room, so nothing downstream needs to
@@ -720,6 +773,10 @@ export function init() {
   if (!offAvatarChanged) offAvatarChanged = onAvatarChanged(() => sendAvatarNow())
   if (!offProportionsChanged) offProportionsChanged = onProportionsChanged(() => sendAvatarNow())
   waitForAuth(USERNAME_WAIT_MS).then(() => {
+    // A confirmed guest never gets a `progress` message (loadProgress is only
+    // ever called for a signed-in userId) — resolve now instead of riding out
+    // the full PROGRESS_KNOWN_TIMEOUT_MS ceiling for the common case.
+    if (!getStableUserId()) resolveProgress(false)
     if (!stopped) connect()
   })
 }
