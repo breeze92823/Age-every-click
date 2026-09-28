@@ -3,6 +3,7 @@ import { setTutorialHint } from './tutorialHints.js'
 import { setObjectiveTarget } from './objectiveArrow.js'
 import { setTutorialSpotlight } from './tutorialSpotlight.js'
 import { onClickGain } from './clickGain.js'
+import { onProgressResolved } from './net.js'
 import { ageMachineSpot } from '../data/area2.js'
 import { OBBY } from '../data/island.js'
 import { ISLAND_SCALE } from '../data/world.js'
@@ -16,9 +17,10 @@ const REBIRTH_ARROW_ROTATION_DEG = -50
 // ObjectiveArrow targets, each step advancing on a real game event (a click,
 // an Age milestone, finishing an obby, owning/using the Basic Age Machine, a
 // first rebirth). No skip/back — this is a one-way path for brand-new
-// sessions. "New player" == every guest and every fresh signed-in save, since
-// nothing here is persisted; it simply runs once per page load and finishes
-// once step 6 completes.
+// sessions. "New player" == a guest, or a signed-in player with no existing
+// save — install() below gates step 0 on systems/net.js's onProgressResolved()
+// so a returning player who already has progress never sees it. It simply
+// runs once per page load and finishes once step 6 completes.
 const BASIC_AGE_MACHINE_INDEX = 0
 
 const OBBY_TARGET = { x: OBBY.x * ISLAND_SCALE-3, z: OBBY.signZ * ISLAND_SCALE+15 }
@@ -82,7 +84,12 @@ export function install() {
   if (installed) return
   installed = true
 
-  enterStep(0)
+  // Only start onboarding once we know this session has no existing save to
+  // hydrate — see onProgressResolved()'s own comment for the guest/timeout
+  // fallbacks that keep this from stalling a genuinely new player's tutorial.
+  onProgressResolved((hasExistingProgress) => {
+    if (!hasExistingProgress) enterStep(0)
+  })
 
   onClickGain(() => {
     if (stepIndex === 0) advance()

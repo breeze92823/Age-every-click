@@ -40,6 +40,7 @@ import {
   PROGRESS_RESEND_DEBOUNCE_MS,
   MOVE_SEND_INTERVAL_MS,
   USERNAME_WAIT_MS,
+  PROGRESS_KNOWN_TIMEOUT_MS,
 } from '../data/net.js'
 
 // --- Public state -----------------------------------------------------------
@@ -300,6 +301,42 @@ function onLocalStoreChangeProgress(state) {
 // already the source of truth by then, and the next scheduled saveProgress
 // writes it back over Mongo regardless.
 let hydratedFromServer = false
+
+// --- New-vs-returning player signal (systems/tutorial.js) -------------------
+// Resolves exactly once, as soon as we know whether this session has an
+// existing saved doc: true the instant the `progress` message actually
+// arrives below (IslandRoom.ts's loadProgress only ever sends one when a doc
+// was found — a brand-new account just leaves the client on defaults and
+// sends nothing), false once we've given up waiting for one (see
+// PROGRESS_KNOWN_TIMEOUT_MS and the confirmed-guest check in init() below).
+// systems/tutorial.js uses this to skip the first-run onboarding entirely for
+// anyone who already has progress, without ever blocking a genuinely new
+// player's tutorial on a slow or absent connection.
+let progressResolved = false
+let progressHadExisting = false
+const progressResolvedListeners = new Set()
+
+function resolveProgress(hasExisting) {
+  if (progressResolved) return
+  progressResolved = true
+  progressHadExisting = hasExisting
+  for (const fn of progressResolvedListeners) {
+    try {
+      fn(hasExisting)
+    } catch {
+      // A broken subscriber must not wedge the netcode.
+    }
+  }
+}
+
+export function onProgressResolved(fn) {
+  if (progressResolved) {
+    fn(progressHadExisting)
+    return () => {}
+  }
+  progressResolvedListeners.add(fn)
+  return () => progressResolvedListeners.delete(fn)
+}
 
 // --- Avatar + position relay (remote-player rendering) ----------------------
 // The same shape components/Player.jsx renders the LOCAL player from — the
@@ -594,6 +631,7 @@ function attachRoom(joined) {
     if (hydratedFromServer) return
     hydratedFromServer = true
     useGameStore.getState().hydrate(msg)
+    resolveProgress(true)
   })
 
   // Reply to requestFreeSpin() below.
@@ -694,6 +732,10 @@ export function init() {
   if (started) return
   started = true
   stopped = false
+  // Ceiling on the new-vs-returning signal above — fires unconditionally so
+  // it also covers the `!SERVER_URL` early return right below (no backend at
+  // all means no way to ever confirm existing progress).
+  setTimeout(() => resolveProgress(false), PROGRESS_KNOWN_TIMEOUT_MS)
   // No server configured for this build (see data/net.js's SERVER_URL_MAIN)
   // — stay 'idle' forever, exactly like the old stub. Every other export
   // below already no-ops without a room, so nothing downstream needs to
@@ -720,6 +762,10 @@ export function init() {
   if (!offAvatarChanged) offAvatarChanged = onAvatarChanged(() => sendAvatarNow())
   if (!offProportionsChanged) offProportionsChanged = onProportionsChanged(() => sendAvatarNow())
   waitForAuth(USERNAME_WAIT_MS).then(() => {
+    // A confirmed guest never gets a `progress` message (loadProgress is only
+    // ever called for a signed-in userId) — resolve now instead of riding out
+    // the full PROGRESS_KNOWN_TIMEOUT_MS ceiling for the common case.
+    if (!getStableUserId()) resolveProgress(false)
     if (!stopped) connect()
   })
 }
