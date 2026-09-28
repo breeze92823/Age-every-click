@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useTutorialHint } from '../../systems/tutorialHints.js'
+import { useTouchMode } from './hooks.js'
 
 // Bottom-center tutorial tip text — plain white text (one substring can be
 // highlighted yellow, e.g. "Coins!", "Basic Age Machine", "Rebirth"), no
@@ -15,6 +16,7 @@ const PULSE_ANIMATION = 'tutorial-hint-pulse 1.6s ease-in-out 0.5s infinite'
 export default function TutorialHint() {
   const text = useTutorialHint((s) => s.text)
   const highlight = useTutorialHint((s) => s.highlight)
+  const isTouch = useTouchMode()
   const spanRef = useRef(null)
 
   useEffect(() => {
@@ -32,11 +34,14 @@ export default function TutorialHint() {
   const split = highlight ? splitOnHighlight(text, highlight) : null
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-[75px] z-50 flex justify-center px-4">
+    <div
+      className="pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4"
+      style={{ bottom: isTouch ? 'calc(env(safe-area-inset-bottom, 0px) + 75px)' : '75px' }}
+    >
       <span
         ref={spanRef}
-        className="inline-block text-center text-[2rem] font-black text-white sm:text-4xl"
-        style={{ WebkitTextStroke: '2px black', paintOrder: 'stroke fill' }}
+        className={`inline-block text-center font-black text-white ${isTouch ? 'text-xl' : 'text-[2rem] sm:text-4xl'}`}
+        style={{ WebkitTextStroke: isTouch ? '1.5px black' : '2px black', paintOrder: 'stroke fill' }}
       >
         {split ? (
           <>

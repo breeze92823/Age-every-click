@@ -154,8 +154,10 @@ export function makePriceTagTexture(text, { px = 96 } = {}) {
 }
 
 // Rounded, outlined green button — the Age Machine buy banner's clickable
-// half. `label` switches from "Buy" to "Use" once the machine is owned.
-export function makeBuyButtonTexture({ label = 'Buy', px = 96 } = {}) {
+// half. `label` switches from "Buy" to "Use" once the machine is owned, and
+// to "In Use" (with `locked` true) while another connected player is riding
+// it — see systems/net.js's isAgeMachineTakenByRemote.
+export function makeBuyButtonTexture({ label = 'Buy', px = 96, locked = false } = {}) {
   const canvas = document.createElement('canvas')
   const g = canvas.getContext('2d')
   const font = `900 ${px}px ${LABEL_FONT}`
@@ -171,8 +173,13 @@ export function makeBuyButtonTexture({ label = 'Buy', px = 96 } = {}) {
   g.lineJoin = 'round'
   roundedRectPath(g, lw / 2, lw / 2, w - lw, h - lw, h / 2 - lw / 2)
   const grad = g.createLinearGradient(0, 0, 0, h)
-  grad.addColorStop(0, '#7cf07a')
-  grad.addColorStop(1, '#2fb84b')
+  if (locked) {
+    grad.addColorStop(0, '#9aa0ac')
+    grad.addColorStop(1, '#4b505c')
+  } else {
+    grad.addColorStop(0, '#7cf07a')
+    grad.addColorStop(1, '#2fb84b')
+  }
   g.fillStyle = grad
   g.fill()
   g.lineWidth = lw

@@ -236,7 +236,7 @@ function ToolbarButton({ icon, iconUrl, label, onClick, isTouch, tile, targetId,
   const tileStyle = colors
     ? {
         background: `linear-gradient(180deg, ${colors[0]} 0%, ${colors[1]} 100%)`,
-        border: `${isTouch ? 2 : 3}px solid ${colors[2]}`,
+        border: `3px solid ${colors[2]}`,
         boxShadow:
           'inset 0 3px 0 rgba(255,255,255,0.45), inset 0 -4px 0 rgba(0,0,0,0.2), 0 3px 6px rgba(0,0,0,0.4)',
       }
@@ -258,7 +258,7 @@ function ToolbarButton({ icon, iconUrl, label, onClick, isTouch, tile, targetId,
       className={`pointer-events-auto flex flex-col items-center justify-center gap-1 text-slate-100 transition ${
         disabled ? 'cursor-not-allowed opacity-40 grayscale' : 'hover:scale-110 hover:brightness-110'
       } ${colors ? 'rounded-xl' : 'rounded-lg'} ${
-        isTouch ? (colors ? 'h-16 w-16' : 'h-12 w-12') : colors ? 'h-28 w-28' : 'h-20 w-20'
+        isTouch ? (colors ? 'h-20 w-20' : 'h-16 w-16') : colors ? 'h-28 w-28' : 'h-20 w-20'
       }`}
     >
       {iconUrl ? (
@@ -266,14 +266,14 @@ function ToolbarButton({ icon, iconUrl, label, onClick, isTouch, tile, targetId,
           src={iconUrl}
           alt=""
           draggable={false}
-          className={isTouch ? 'h-9 w-9' : 'h-12 w-12'}
+          className={isTouch ? 'h-11 w-11' : 'h-12 w-12'}
           style={{ filter: 'drop-shadow(0 0 6px rgba(255,255,255,0.5))' }}
         />
       ) : (
         <span
           className="leading-none"
           style={{
-            fontSize: isTouch ? '2.25rem' : '3rem',
+            fontSize: isTouch ? '2.75rem' : '3rem',
             WebkitTextStroke: '5px black',
             paintOrder: 'stroke fill',
             filter: 'brightness(1.35) saturate(1.3) drop-shadow(0 0 6px rgba(255,255,255,0.5))',
@@ -285,7 +285,7 @@ function ToolbarButton({ icon, iconUrl, label, onClick, isTouch, tile, targetId,
       <span
         className="font-semibold leading-none tracking-wide"
         style={{
-          fontSize: isTouch ? '14px' : '1.5rem',
+          fontSize: isTouch ? '16px' : '1.5rem',
           WebkitTextStroke: '2px black',
           paintOrder: 'stroke fill',
         }}
