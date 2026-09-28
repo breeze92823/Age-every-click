@@ -23,10 +23,25 @@ import { player, resetPlayer } from './playerState.js'
 import { syncYawToPlayer } from './cameraOrbit.js'
 import { useGameStore } from '../store/useGameStore.js'
 import { playWallBreak, playActionFail, playLevelUp } from './sfx.js'
+import { getBridgeTiles, sendBridgeStep, sendBridgeFail } from './net.js'
 
 // Runtime state for the Bonus Scene's glass bridge. Tiles are mutated in
 // place (never reallocated) so BonusScene.jsx can bind one mesh per entry
 // and read them every frame without a React subscription.
+//
+// `safe`/`broken`/`bounced` are mirrored every frame off the shared room's
+// BridgeTileState array (server rooms/IslandRoom.ts, via net.js's
+// getBridgeTiles()) whenever connected — see syncFromNetwork() below — so
+// every player online at once sees and affects the exact same puzzle. A
+// single fall/timeout only resets the failing player's own run (see
+// respawnAtStart()), but the room counts failures across the whole group
+// and rerolls the shared layout after BRIDGE_RESHUFFLE_AFTER_FAILS of them
+// (IslandRoom.ts's `bridgeFail` handler) — reaching every client, including
+// anyone still mid-attempt, the same way a remote footstep does.
+// Offline/solo (no room), this file falls back to owning those three fields
+// itself exactly as before multiplayer support existed: resetBonusBridge()
+// randomizes `safe` locally per attempt, and stepBonusBridge() mutates
+// `broken`/`bounced` straight off the local player's own footsteps.
 
 // How far past an edge the player's feet still count as supported. Tiles
 // get exactly half the 0.4 m row gap, so rows join up but the 0.5 m slot
@@ -41,6 +56,7 @@ for (let c = 0; c < COLUMNS; c++) {
   for (let lane = 0; lane < LANE_X.length; lane++) {
     const last = c === COLUMNS - 1
     tiles.push({
+      index: tiles.length, // matches server BridgeTileState array index 1:1 — see syncFromNetwork()
       x: LANE_X[lane],
       z: FIRST_COLUMN_Z - c * COLUMN_PITCH,
       column: c,
@@ -61,16 +77,53 @@ export const useBonusTimer = create(() => ({ timeLeft: TIME_LIMIT }))
 let running = false
 let remaining = TIME_LIMIT
 
-export function resetBonusBridge() {
-  for (let c = 0; c < COLUMNS - 1; c++) {
-    const safeLane = Math.random() < 0.5 ? 0 : 1
-    for (const t of tiles) if (t.column === c) t.safe = t.lane === safeLane
+// Mirrors the shared room's tile state onto the local `tiles` array, one
+// field at a time, and edge-detects the transitions that need a fresh local
+// animation clock — bounceT/trapT are purely cosmetic tweens, so every
+// client just runs its own, they don't need to be frame-perfect synced.
+// Returns false when there's nothing to mirror (no room, or the synced
+// array hasn't arrived yet), so callers fall back to local-authority mode.
+function syncFromNetwork() {
+  const net = getBridgeTiles()
+  if (!net || net.length < tiles.length) return false
+  for (let i = 0; i < tiles.length; i++) {
+    const nt = net[i]
+    const t = tiles[i]
+    t.safe = nt.safe
+    if (nt.bounced && !t.bounced) {
+      t.bounced = true
+      t.bounceT = 0
+    }
+    if (nt.broken && !t.broken) {
+      t.broken = true
+      t.trapT = 0
+      playWallBreak()
+    } else if (!nt.broken && t.broken) {
+      t.broken = false
+    }
   }
-  for (const t of tiles) {
-    t.bounced = false
-    t.bounceT = null
-    t.broken = false
-    t.trapT = null
+  return true
+}
+
+export function resetBonusBridge() {
+  // Online, the layout and every tile's live state belong to the shared
+  // room (server rooms/IslandRoom.ts) — this one player's own fall/timeout
+  // must never by itself wipe the safe-tile progress the rest of the group
+  // already found (a reshuffle only fires once enough failures pile up
+  // across everyone — see respawnAtStart()'s sendBridgeFail() and
+  // BRIDGE_RESHUFFLE_AFTER_FAILS' own comment). Only this player's own run
+  // (the countdown below) is personal.
+  if (!getBridgeTiles()) {
+    for (let c = 0; c < COLUMNS - 1; c++) {
+      const safeLane = Math.random() < 0.5 ? 0 : 1
+      for (const t of tiles) if (t.column === c) t.safe = t.lane === safeLane
+    }
+    for (const t of tiles) {
+      t.bounced = false
+      t.bounceT = null
+      t.broken = false
+      t.trapT = null
+    }
   }
   running = false
   remaining = TIME_LIMIT
@@ -108,6 +161,10 @@ export function bonusGroundAt(x, z) {
 
 function respawnAtStart() {
   playActionFail()
+  // Online, this also counts toward the shared room's reshuffle threshold
+  // (server rooms/IslandRoom.ts's `bridgeFail` — see BRIDGE_RESHUFFLE_AFTER_
+  // FAILS' own comment) — a no-op offline/solo, same guard as sendBridgeStep.
+  sendBridgeFail()
   resetBonusBridge()
   resetPlayer(SPAWN, SPAWN_FACING)
   syncYawToPlayer()
@@ -116,10 +173,17 @@ function respawnAtStart() {
 // Runs after playerMovement.js has landed the player this frame. Returns
 // true when it teleported the player, so the caller stops there.
 export function stepBonusBridge(dt) {
+  // Online, this also pulls the shared room's latest tile state onto the
+  // local `tiles` array (see syncFromNetwork()'s own comment) before
+  // anything below reads safe/broken this frame.
+  const online = syncFromNetwork()
+
   // Advance each tile's own tween clock. A safe hop always finishes and
-  // clears (bounceT -> null); an unsafe trap re-arms itself the same way —
-  // broken flips back to false the instant its clock runs out, so
-  // supports() starts holding weight on it again.
+  // clears (bounceT -> null). An unsafe trap's shrink/flash clears the same
+  // way; offline it also re-arms itself right here (broken -> false), but
+  // online the room's own re-arm timer is what actually restores collision
+  // — syncFromNetwork() above picks that up as a broken:true -> false edge,
+  // so this must not race ahead of the server and clear it early.
   for (const t of tiles) {
     if (t.bounceT != null) {
       t.bounceT += dt
@@ -129,7 +193,7 @@ export function stepBonusBridge(dt) {
       t.trapT += dt
       if (t.trapT >= UNSAFE_RESET_DELAY) {
         t.trapT = null
-        t.broken = false
+        if (!online) t.broken = false
       }
     }
   }
@@ -139,7 +203,14 @@ export function stepBonusBridge(dt) {
   if (player.grounded) {
     for (const t of tiles) {
       if (!supports(t, p.x, p.z)) continue
-      if (t.safe) {
+      if (online) {
+        // The room alone decides the outcome (BridgeTileState.safe) — this
+        // only reports the footstep. The resulting patch lands back on this
+        // same tile next frame via syncFromNetwork() above and drives the
+        // bounce/trap visuals uniformly, exactly like a remote player's own
+        // footstep would.
+        if ((t.safe && !t.bounced) || (!t.safe && !t.broken)) sendBridgeStep(t.index)
+      } else if (t.safe) {
         // One-shot: don't restart the hop every frame the player just
         // stands there, or keep re-triggering it on repeat visits.
         if (!t.bounced) {
