@@ -215,7 +215,11 @@ export const useGameStore = create((set, get) => ({
       const boostMult = (Date.now() < state.ageBoostUntil ? AGE_BOOST_MULTIPLIER : 1) * (state.speedCoil ? SPEED_COIL_GAIN_MULTIPLIER : 1)
       const gain = Math.floor(state.speedPerGain * (state.rebirth + 1) * mult * auraMult * boostMult)
       const speed = clamp(state.speed + gain, SPEED_MIN, SPEED_MAX)
-      applied = speed - state.speed
+      // Rounded, not raw: state.speed can carry a fractional remainder from
+      // tickAgeMachine's per-frame `ageRate * dt` additions, so a plain
+      // subtraction here can land a hair off the intended integer gain
+      // (e.g. 1.9999999999999998) and leak into the "+N" popup as-is.
+      applied = Math.round(speed - state.speed)
       return derive({ ...state, speed })
     })
     return applied
@@ -225,7 +229,7 @@ export const useGameStore = create((set, get) => ({
   // duplicate/stale caller can never double-apply a rebirth.
   acceptRebirth() {
     const state = get()
-    if (!canAcceptRebirth(state.level, state.rebirth)) return
+    if (!canAcceptRebirth(state.speed, state.rebirth)) return
     set((s) =>
       derive({
         ...s,

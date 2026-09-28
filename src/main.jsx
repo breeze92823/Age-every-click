@@ -10,6 +10,7 @@ import { SPAWN, SPAWN_FACING } from './data/world.js'
 import { init as initBloxity, teardown as teardownBloxity } from './systems/bloxity.js'
 import { install as installPersistence } from './systems/persistence.js'
 import { init as initNet, teardown as teardownNet } from './systems/net.js'
+import { install as installTutorial } from './systems/tutorial.js'
 import { useGameStore } from './store/useGameStore.js'
 
 resetPlayer(SPAWN, SPAWN_FACING)
@@ -28,6 +29,7 @@ installPersistence()
 // configured (see data/net.js's SERVER_URL_MAIN) — the game stays fully
 // playable solo either way.
 initNet()
+installTutorial()
 
 // Dev-only console access to the progression store, e.g.
 // window.__gameStore.setState({ speed: 9999 }) to test the level bar/rebirth

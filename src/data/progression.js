@@ -159,7 +159,9 @@ export function clicksToNextLevel(speed, gainPerClick) {
 }
 
 // The single source of truth for rebirth eligibility — the store's guard and
-// the HUD button's visibility check both call this, so they can never disagree.
-export function canAcceptRebirth(level, rebirth) {
-  return rebirth < REBIRTH_MAX && level >= rebirthRequirement(rebirth)
+// the HUD button's visibility check both call this, so they can never
+// disagree. Gated on Age (the player's raw click total), not Level — rebirth
+// 0 needs Age 100, rebirth 1 needs Age 500, and so on by REBIRTH_LEVEL_RATIO.
+export function canAcceptRebirth(age, rebirth) {
+  return rebirth < REBIRTH_MAX && age >= rebirthRequirement(rebirth)
 }
