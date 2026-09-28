@@ -37,7 +37,7 @@ import { makeStudTexture, makeTileTexture, setBoxUVsInTiles, shade } from '../sy
 import { formatCompact } from '../systems/format.js'
 import { formatShort } from '../data/format.js'
 import { useGameStore } from '../store/useGameStore.js'
-import { getLeaderboard, subscribe as subscribeNet } from '../systems/net.js'
+import { getLeaderboard, subscribe as subscribeNet, isAgeMachineTakenByRemote } from '../systems/net.js'
 import { playButtonClick, playActionFail } from '../systems/sfx.js'
 import { showActionResult } from '../systems/actionResult.js'
 
@@ -119,22 +119,53 @@ function OwnedTag({ position }) {
   )
 }
 
-// Clickable pill under the price/owned tag — reads "Buy" before purchase and
-// "Use" after. Fixed to face +Z (not a billboard like the other labels) so
-// it doesn't turn toward whichever side the player is viewing from. A
-// plane's default normal already points +Z, so no rotation is needed.
-// Meshes raycast like sprites do, so this still takes r3f's onClick directly.
+// Polls systems/net.js's isAgeMachineTakenByRemote(index) on
+// LEADERBOARD_POLL_MS, same reasoning as useLeaderboardRows below: another
+// player's avatar (carrying their ridingAgeMachine) only patches in place,
+// no event fires when it changes, so a light poll is the cheapest way to
+// notice. Also refreshes immediately on any net.js emit (join/leave), so a
+// player who just left frees their machine's label right away. Skipped
+// entirely while `active` (the machine) isn't owned, where "taken" is moot.
+function useAgeMachineTakenByRemote(index, active) {
+  const [taken, setTaken] = useState(false)
+  useEffect(() => {
+    if (!active) {
+      setTaken(false)
+      return undefined
+    }
+    const tick = () => setTaken(isAgeMachineTakenByRemote(index))
+    tick()
+    const offNet = subscribeNet(tick)
+    const poll = setInterval(tick, LEADERBOARD_POLL_MS)
+    return () => {
+      offNet()
+      clearInterval(poll)
+    }
+  }, [index, active])
+  return taken
+}
+
+// Clickable pill under the price/owned tag — reads "Buy" before purchase,
+// "Use" once owned, and "In Use" (greyed, unclickable) while another
+// connected player is currently riding it. Fixed to face +Z (not a billboard
+// like the other labels) so it doesn't turn toward whichever side the player
+// is viewing from. A plane's default normal already points +Z, so no
+// rotation is needed. Meshes raycast like sprites do, so this still takes
+// r3f's onClick directly.
 //
-// Once owned, "Use" teleports the player onto the machine's stand and locks
-// them there (see useGameStore's enterAgeMachine/ridingAgeMachine and
-// playerMovement.js's freeze) until they tap the Return button. `index` is
-// the store index (data/area2.js's ALL_AGE_MACHINE_TIERS), which also says
-// which stand to park the player on.
+// Once owned and free, "Use" teleports the player onto the machine's stand
+// and locks them there (see useGameStore's enterAgeMachine/ridingAgeMachine
+// and playerMovement.js's freeze) until they tap the Return button. `index`
+// is the store index (data/area2.js's ALL_AGE_MACHINE_TIERS), which also
+// says which stand to park the player on. Only one rider at a time is
+// enforced via systems/net.js's relayed-avatar trick (see its own comment) —
+// best-effort, not a server-side lock.
 function BuyButton({ index, owned, price, position }) {
   const buyAgeMachine = useGameStore((s) => s.buyAgeMachine)
   const enterAgeMachine = useGameStore((s) => s.enterAgeMachine)
-  const label = owned ? 'Use' : 'Buy'
-  const { texture, aspect } = useMemo(() => makeBuyButtonTexture({ label }), [label])
+  const taken = useAgeMachineTakenByRemote(index, owned)
+  const label = owned ? (taken ? 'In Use' : 'Use') : 'Buy'
+  const { texture, aspect } = useMemo(() => makeBuyButtonTexture({ label, locked: taken }), [label, taken])
   useEffect(() => () => texture.dispose(), [texture])
   const height = 0.34
   return (
@@ -143,7 +174,13 @@ function BuyButton({ index, owned, price, position }) {
       onClick={(e) => {
         e.stopPropagation()
         if (owned) {
-          if (enterAgeMachine(index)) {
+          // Re-checked live rather than the polled `taken` state (which can
+          // be up to LEADERBOARD_POLL_MS stale), so a click right as another
+          // player starts riding still gets caught.
+          if (isAgeMachineTakenByRemote(index)) {
+            playActionFail()
+            showActionResult('Someone else is using this machine', false)
+          } else if (enterAgeMachine(index)) {
             playButtonClick()
             const spot = ageMachineSpot(index)
             resetPlayer({ x: spot.x * ISLAND_SCALE, y: spot.topY + 1, z: spot.z * ISLAND_SCALE })

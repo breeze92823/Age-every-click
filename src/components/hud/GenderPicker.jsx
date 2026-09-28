@@ -13,6 +13,7 @@ import {
 import { useGameStore } from '../../store/useGameStore.js'
 import { buildDefaultCharacter } from '../../systems/defaultCharacter.js'
 import { playButtonClick, playButtonHover } from '../../systems/sfx.js'
+import { useTouchMode } from './hooks.js'
 
 // Shown at the start of every session (the store's gender starts null and is
 // never saved) over a blurred game. Choosing a card sets the store's gender,
@@ -67,15 +68,15 @@ function Card({ label, image, from, to, ring, onPick }) {
       type="button"
       onClick={onPick}
       onMouseEnter={playButtonHover}
-      className="group flex flex-1 flex-col items-center gap-0 focus:outline-none"
+      className="group flex flex-1 touch-manipulation flex-col items-center gap-0 focus:outline-none"
     >
       <div
-        className={`relative aspect-square w-[min(78%,40dvh)] overflow-hidden rounded-full border-[3px] border-black transition group-hover:scale-105 group-focus-visible:scale-105 ${ring}`}
+        className={`relative aspect-square w-[min(78%,40dvh)] overflow-hidden rounded-full border-[3px] border-black transition group-hover:scale-105 group-focus-visible:scale-105 group-active:scale-95 ${ring}`}
       >
         {image && <img src={image} alt="" draggable={false} className="absolute inset-0 h-full w-full object-cover" />}
       </div>
       <span
-        className={`-mt-[0.6em] w-[86%] rounded-lg border-[3px] border-black bg-gradient-to-b py-1 text-center text-[clamp(1.25rem,min(5vw,9dvh),3.25rem)] font-black leading-none text-white shadow-[0_4px_0_rgba(0,0,0,0.35)] transition group-hover:brightness-110 ${from} ${to}`}
+        className={`-mt-[0.6em] w-[86%] rounded-lg border-[3px] border-black bg-gradient-to-b py-1 text-center text-[clamp(1.25rem,min(5vw,9dvh),3.25rem)] font-black leading-none text-white shadow-[0_4px_0_rgba(0,0,0,0.35)] transition group-hover:brightness-110 group-active:brightness-95 ${from} ${to}`}
         style={OUTLINE}
       >
         {label}
@@ -88,6 +89,7 @@ export default function GenderPicker() {
   const gender = useGameStore((s) => s.gender)
   const setGender = useGameStore((s) => s.setGender)
   const [portraits, setPortraits] = useState({})
+  const isTouch = useTouchMode()
 
   const needsPick = gender == null
   useEffect(() => {
@@ -118,9 +120,11 @@ export default function GenderPicker() {
       aria-modal="true"
       aria-label="Pick your gender"
     >
-      <div className="relative w-[min(860px,94vw,170dvh)]">
+      <div className="relative w-full max-w-[min(860px,170dvh)]">
         <span
-          className="pointer-events-none absolute -left-3 -top-[0.75em] z-10 -rotate-3 text-[clamp(1.75rem,min(7vw,12dvh),4.5rem)] font-black leading-none text-white"
+          className={`pointer-events-none absolute z-10 -rotate-3 font-black leading-none text-white ${
+            isTouch ? '-left-1 -top-2 text-2xl' : '-left-3 -top-[0.75em] text-[clamp(1.75rem,min(7vw,12dvh),4.5rem)]'
+          }`}
           style={OUTLINE}
         >
           Hello!
@@ -129,7 +133,11 @@ export default function GenderPicker() {
           type="button"
           onClick={() => pick('boy')}
           aria-label="Close"
-          className="absolute -right-3 -top-4 z-10 flex h-[clamp(2rem,7dvh,2.75rem)] w-[clamp(2rem,7dvh,2.75rem)] items-center justify-center rounded-lg border-[3px] border-black bg-red-600 text-xl font-black text-white shadow-[0_3px_0_rgba(0,0,0,0.4)] transition hover:bg-red-500"
+          className={`absolute z-10 flex touch-manipulation items-center justify-center rounded-lg border-[3px] border-black bg-red-600 font-black text-white shadow-[0_3px_0_rgba(0,0,0,0.4)] transition hover:bg-red-500 active:bg-red-700 ${
+            isTouch
+              ? '-right-1 -top-2 h-11 w-11 text-2xl'
+              : '-right-3 -top-4 h-[clamp(2rem,7dvh,2.75rem)] w-[clamp(2rem,7dvh,2.75rem)] text-xl'
+          }`}
         >
           ✕
         </button>

@@ -123,6 +123,24 @@ export function subscribeRoster(onAdd, onRemove) {
   return () => rosterListeners.delete(entry)
 }
 
+// components/IslandLandmarks.jsx's BuyButton: true while some OTHER
+// connected session's relayed avatar (see avatarPayload's ridingAgeMachine
+// field) says they're riding this Age Machine `index`. Keeps a machine to one
+// rider at a time without any backend change — see avatarPayload's own
+// comment for the race-window caveat this accepts.
+export function isAgeMachineTakenByRemote(index) {
+  for (const p of remotePlayers.values()) {
+    let avatar
+    try {
+      avatar = JSON.parse(p.avatar || '')
+    } catch {
+      continue // mid-update or malformed payload — treat as not riding
+    }
+    if (avatar && avatar.ridingAgeMachine === index) return true
+  }
+  return false
+}
+
 // --- Connection machine -------------------------------------------------
 let sdkModule = null
 let client = null
@@ -300,6 +318,15 @@ function avatarPayload() {
     // player (never a dev-mode stub) shows Bloxity accessories.
     equipped: authState.user && !DEV_MODE ? getEquippedAvatar() : null,
     proportions: getProportions(),
+    // Piggybacks the already-relayed avatar string to tell every other
+    // client which Age Machine (if any) we're currently riding — the server
+    // never parses this field, so no backend change is needed to add it.
+    // isAgeMachineTakenByRemote() below reads it back out of remotePlayers'
+    // live avatar field to keep a machine to one rider at a time. Best-effort
+    // only (no server-side lock): two sessions clicking "Use" on the same
+    // free machine in the same instant can still both win, no worse than any
+    // other remote-player field here being a packet behind.
+    ridingAgeMachine: s.ridingAgeMachine,
   }
 }
 
@@ -317,13 +344,20 @@ function sendAvatarNow() {
   }
 }
 
-// Last level/gender we already triggered a resend for — useGameStore.subscribe
-// fires on every store change, same filtering need as lastScheduledStats.
-let lastAvatarTrigger = { level: undefined, gender: undefined }
+// Last level/gender/ridingAgeMachine we already triggered a resend for —
+// useGameStore.subscribe fires on every store change, same filtering need as
+// lastScheduledStats. ridingAgeMachine is included so entering/exiting a
+// machine propagates to isAgeMachineTakenByRemote() on every other client
+// right away, not just whenever level/gender next happens to change.
+let lastAvatarTrigger = { level: undefined, gender: undefined, ridingAgeMachine: undefined }
 
 function onLocalStoreChangeAvatar(state) {
-  if (state.level !== lastAvatarTrigger.level || state.gender !== lastAvatarTrigger.gender) {
-    lastAvatarTrigger = { level: state.level, gender: state.gender }
+  if (
+    state.level !== lastAvatarTrigger.level ||
+    state.gender !== lastAvatarTrigger.gender ||
+    state.ridingAgeMachine !== lastAvatarTrigger.ridingAgeMachine
+  ) {
+    lastAvatarTrigger = { level: state.level, gender: state.gender, ridingAgeMachine: state.ridingAgeMachine }
     sendAvatarNow()
   }
 }

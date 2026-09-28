@@ -17,11 +17,32 @@ const STICK_RADIUS = 54 // px; thumb travel that maps to full-speed movement
 const DEAD_ZONE = 0.16 // fraction of the radius ignored before the character moves
 const LOOK_SENS = 0.75 // touch drag px -> same units cameraOrbit expects from a mouse
 const PINCH_ZOOM = 2.5 // pinch distance px -> wheel-equivalent zoom units
+const TAP_MAX_MOVE = 10 // px; beyond this a touch counts as a drag, not a tap
+const TAP_MAX_DURATION = 400 // ms; beyond this a touch counts as a hold, not a tap
+
+// LookZone/MoveStick are full-panel DOM overlays that sit in front of the
+// canvas to catch camera-drag and movement gestures, which means a tap on a
+// world object rendered underneath them (e.g. IslandLandmarks' BuyButton)
+// never reaches r3f's raycaster — the overlay swallows the pointer events.
+// When such a touch turns out to be a short, near-stationary tap rather than
+// a drag, replay it as a synthetic pointerdown+pointerup+click on the canvas
+// so mesh onClick handlers still fire. r3f only invokes a click handler for
+// objects present in the hits captured on the *pointerdown* that preceded
+// it (react-three/fiber's events.js), so both events are required.
+function tapCanvas(x, y) {
+  const canvas = document.querySelector('canvas')
+  if (!canvas) return
+  const shared = { clientX: x, clientY: y, bubbles: true, cancelable: true, composed: true, pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0 }
+  canvas.dispatchEvent(new PointerEvent('pointerdown', { ...shared, buttons: 1 }))
+  canvas.dispatchEvent(new PointerEvent('pointerup', { ...shared, buttons: 0 }))
+  canvas.dispatchEvent(new MouseEvent('click', { clientX: x, clientY: y, bubbles: true, cancelable: true, composed: true, button: 0 }))
+}
 
 // One-finger drag on this half orbits the camera; two fingers pinch-zoom.
 function LookZone() {
   const pointers = useRef(new Map())
   const lastPinch = useRef(0)
+  const tap = useRef(null) // { x, y, t } for the sole finger of a still-possible tap
 
   const dist = () => {
     const [a, b] = [...pointers.current.values()]
@@ -31,7 +52,12 @@ function LookZone() {
   const onDown = (e) => {
     e.currentTarget.setPointerCapture(e.pointerId)
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
-    if (pointers.current.size === 2) lastPinch.current = dist()
+    if (pointers.current.size === 2) {
+      lastPinch.current = dist()
+      tap.current = null // a second finger rules out a tap
+    } else {
+      tap.current = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() }
+    }
   }
 
   const onMove = (e) => {
@@ -46,12 +72,20 @@ function LookZone() {
       lastPinch.current = d
       return
     }
+    if (tap.current && Math.hypot(next.x - tap.current.x, next.y - tap.current.y) > TAP_MAX_MOVE) {
+      tap.current = null
+    }
     addTouchLook((next.x - prev.x) * LOOK_SENS, (next.y - prev.y) * LOOK_SENS)
   }
 
   const onUp = (e) => {
     pointers.current.delete(e.pointerId)
     lastPinch.current = 0
+    const t = tap.current
+    tap.current = null
+    if (t && t.id === e.pointerId && performance.now() - t.t <= TAP_MAX_DURATION) {
+      tapCanvas(e.clientX, e.clientY)
+    }
   }
 
   return (
@@ -92,7 +126,7 @@ function MoveStick() {
 
   const onDown = (e) => {
     e.currentTarget.setPointerCapture(e.pointerId)
-    stick.current = { id: e.pointerId, ox: e.clientX, oy: e.clientY, tx: e.clientX, ty: e.clientY }
+    stick.current = { id: e.pointerId, ox: e.clientX, oy: e.clientY, tx: e.clientX, ty: e.clientY, t: performance.now() }
     force()
   }
 
@@ -106,9 +140,17 @@ function MoveStick() {
   }
 
   const onUp = (e) => {
-    if (stick.current && stick.current.id !== e.pointerId) return
+    const s = stick.current
+    if (s && s.id !== e.pointerId) return
     stick.current = null
     setTouchMove(0, 0)
+    if (
+      s &&
+      performance.now() - s.t <= TAP_MAX_DURATION &&
+      Math.hypot(s.tx - s.ox, s.ty - s.oy) <= TAP_MAX_MOVE
+    ) {
+      tapCanvas(e.clientX, e.clientY)
+    }
     force()
   }
 
