@@ -1,5 +1,6 @@
 import { useGameStore } from '../../store/useGameStore.js'
 import { rebirthRequirement, clamp } from '../../data/progression.js'
+import { formatShort } from '../../data/format.js'
 import {
   LEVEL_BAR_WIDTH,
   LEVEL_BAR_HEIGHT,
@@ -18,14 +19,13 @@ const TEXT_OUTLINE =
   `0 4px 8px rgba(0,0,0,0.45)`
 
 // Visual twin of LevelBar.jsx's track, but plots progress toward the *next
-// rebirth* — level against rebirthRequirement(rebirth) — instead of Speed
+// rebirth* — Age against rebirthRequirement(rebirth) — instead of Speed
 // toward the next character level. Used only inside the Rebirth modal.
-// Ported verbatim from Ice-Skate's components/hud/RebirthLevelBar.jsx.
 export default function RebirthLevelBar({ compact = false }) {
-  const level = useGameStore((s) => s.level)
+  const speed = useGameStore((s) => s.speed)
   const rebirth = useGameStore((s) => s.rebirth)
   const requirement = rebirthRequirement(rebirth)
-  const frac = clamp(level / requirement, 0, 1)
+  const frac = clamp(speed / requirement, 0, 1)
 
   const scale = compact ? REBIRTH_LEVEL_BAR_TOUCH_SCALE : 1
   const height = LEVEL_BAR_HEIGHT * scale
@@ -70,7 +70,7 @@ export default function RebirthLevelBar({ compact = false }) {
             }}
           >
             <span style={{ font: labelFont, color: '#fff', textShadow: TEXT_OUTLINE }}>
-              Level {level}/{requirement}
+              Age {formatShort(Math.floor(speed))}/{formatShort(requirement)}
             </span>
           </div>
         </div>

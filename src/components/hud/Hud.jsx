@@ -25,6 +25,8 @@ import ActionResult from './ActionResult.jsx'
 import ActionPopups from './ActionPopups.jsx'
 import BonusTimer from './BonusTimer.jsx'
 import InteractPrompt from './InteractPrompt.jsx'
+import TutorialHint from './TutorialHint.jsx'
+import TutorialSpotlight from './TutorialSpotlight.jsx'
 import LuckyWheel from './LuckyWheel.jsx'
 import GenderPicker from './GenderPicker.jsx'
 import { actionResultState } from '../../systems/actionResult.js'
@@ -120,7 +122,7 @@ function RebirthWindow({ rebirth, canRebirth, onConfirm, onClose, isTouch }) {
           className={`flex-1 self-center rounded-lg border-2 border-black bg-gradient-to-b from-lime-400 to-green-600 font-black text-white shadow-[0_4px_0_rgba(0,0,0,0.4)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100 ${isTouch ? 'px-2 py-2 text-sm' : 'px-4 py-3 text-lg'}`}
           style={{ WebkitTextStroke: isTouch ? '1px black' : '1.5px black', paintOrder: 'stroke fill' }}
         >
-          {canRebirth ? 'Rebirth' : `Level ${requirement} needed`}
+          {canRebirth ? 'Rebirth' : `Age ${requirement} needed`}
         </button>
       </div>
     </HudModal>
@@ -229,7 +231,7 @@ const TOOLBAR_TILES = {
   blue: ['#5ec8ff', '#1f8fe0', '#0d3f73'],
 }
 
-function ToolbarButton({ icon, iconUrl, label, onClick, isTouch, tile }) {
+function ToolbarButton({ icon, iconUrl, label, onClick, isTouch, tile, targetId, disabled }) {
   const colors = tile ? TOOLBAR_TILES[tile] : null
   const tileStyle = colors
     ? {
@@ -243,16 +245,21 @@ function ToolbarButton({ icon, iconUrl, label, onClick, isTouch, tile }) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={() => {
+        if (disabled) return
         playButtonClick()
         onClick()
       }}
-      onMouseEnter={playButtonHover}
-      title={`Open ${label}`}
+      onMouseEnter={disabled ? undefined : playButtonHover}
+      title={disabled ? label : `Open ${label}`}
+      data-tutorial-target={targetId}
       style={tileStyle}
-      className={`pointer-events-auto flex flex-col items-center justify-center gap-1 text-slate-100 transition hover:scale-110 hover:brightness-110 ${
-        colors ? 'rounded-xl' : 'rounded-lg'
-      } ${isTouch ? (colors ? 'h-16 w-16' : 'h-12 w-12') : colors ? 'h-28 w-28' : 'h-20 w-20'}`}
+      className={`pointer-events-auto flex flex-col items-center justify-center gap-1 text-slate-100 transition ${
+        disabled ? 'cursor-not-allowed opacity-40 grayscale' : 'hover:scale-110 hover:brightness-110'
+      } ${colors ? 'rounded-xl' : 'rounded-lg'} ${
+        isTouch ? (colors ? 'h-16 w-16' : 'h-12 w-12') : colors ? 'h-28 w-28' : 'h-20 w-20'
+      }`}
     >
       {iconUrl ? (
         <img
@@ -404,9 +411,8 @@ function RightCenterCoins() {
 // Left-edge, vertically centred stack: a small toolbar of economy panels
 // (Rebirth/Shop).
 function LeftCenterControls() {
-  const level = useGameStore((s) => s.level)
   const rebirth = useGameStore((s) => s.rebirth)
-  const canRebirth = useGameStore((s) => canAcceptRebirth(s.level, s.rebirth))
+  const canRebirth = useGameStore((s) => canAcceptRebirth(s.speed, s.rebirth))
   const acceptRebirth = useGameStore((s) => s.acceptRebirth)
   const [rebirthOpen, setRebirthOpen] = useState(false)
   // Shop lives in the store so the stall's E interaction (systems/
@@ -421,6 +427,11 @@ function LeftCenterControls() {
     else closeShop()
   }
   const isTouch = useTouchMode()
+  // Obby/Spawn teleport the player, which would fight the frozen-on-stand
+  // position playerMovement.js holds while riding — block them until Return
+  // (see ReturnButton) clears ridingAgeMachine.
+  const ridingAgeMachine = useGameStore((s) => s.ridingAgeMachine)
+  const disableTeleportButtons = ridingAgeMachine != null
 
   const modal = {
     rebirth: (
@@ -462,6 +473,7 @@ function LeftCenterControls() {
           tile="pink"
           onClick={() => setOpenWindow('rebirth')}
           isTouch={isTouch}
+          targetId="rebirth"
         />
         <ToolbarButton
           iconUrl="/ui/shop.png"
@@ -478,6 +490,7 @@ function LeftCenterControls() {
           tile="purple"
           onClick={goToObby}
           isTouch={isTouch}
+          disabled={disableTeleportButtons}
         />
         <ToolbarButton
           icon="🚩"
@@ -485,6 +498,7 @@ function LeftCenterControls() {
           tile="blue"
           onClick={goToSpawn}
           isTouch={isTouch}
+          disabled={disableTeleportButtons}
         />
       </div>
     </div>
@@ -623,6 +637,15 @@ export default function Hud() {
       {/* Bottom-center "Press E to ..." pill — armed while standing on one
          of the island's obby entry pads (see systems/scenePortals.js). */}
       <InteractPrompt />
+
+      {/* Bottom-center tutorial tip text — placeholder "Test" copy for now,
+         see systems/tutorialHints.js. */}
+      <TutorialHint />
+
+      {/* Dims the whole HUD except one target button plus a pointing arrow —
+         currently only the final tutorial step (Buy Your First Rebirth!),
+         see systems/tutorialSpotlight.js. */}
+      <TutorialSpotlight />
 
       {/* Lucky Wheel popup — opened with E at the Statue (see
          systems/statueInteract.js). Portals itself to document.body. */}

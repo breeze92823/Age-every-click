@@ -15,6 +15,16 @@ const presses = new Map()
 let installed = false
 let lastGainAt = -Infinity
 
+// systems/tutorial.js's "Click the Screen!" first step listens here instead
+// of inferring a click from the store's speed value, since tickAgeMachine
+// can also move speed without a click.
+const listeners = new Set()
+
+export function onClickGain(cb) {
+  listeners.add(cb)
+  return () => listeners.delete(cb)
+}
+
 function isClickSurface(el) {
   return el?.tagName === 'CANVAS' || el?.dataset?.clickGain !== undefined
 }
@@ -37,6 +47,7 @@ function onPointerUp(e) {
   if (now - lastGainAt < GAIN_INTERVAL_MS) return
   lastGainAt = now
   spawnActionPopup(useGameStore.getState().gainSpeed())
+  for (const cb of listeners) cb()
 }
 
 function onPointerCancel(e) {

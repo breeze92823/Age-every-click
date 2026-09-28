@@ -105,11 +105,11 @@ export default function LevelBar() {
     const paint = () => {
       last = performance.now()
       const { speed, rebirth, speedPerGain, equippedAura } = useGameStore.getState()
-      const { level, total, frac } = levelProgress(speed)
+      const { total, frac } = levelProgress(speed)
       const gainPerClick = Math.floor(speedPerGain * (rebirth + 1) * auraStrengthMultiplier(equippedAura))
       const clicksLeft = clicksToNextLevel(speed, gainPerClick)
       if (rebirthRef.current)
-        rebirthRef.current.style.display = canAcceptRebirth(level, rebirth) ? 'inline-block' : 'none'
+        rebirthRef.current.style.display = canAcceptRebirth(speed, rebirth) ? 'inline-block' : 'none'
       if (titleRef.current) {
         titleRef.current.textContent = `Age: ${formatShort(total)}`
         if (prevTotal !== null && total !== prevTotal) pop(titleRef.current)
@@ -153,22 +153,6 @@ export default function LevelBar() {
       className="pointer-events-none absolute left-1/2"
       style={{ ...L.wrapper, transformOrigin: 'top center' }}
     >
-      <div style={{ textAlign: 'center', marginBottom: L.titleGap * 0.6 }}>
-        <span
-          ref={rebirthRef}
-          style={{
-            display: 'none',
-            letterSpacing: 0.5,
-            color: '#ffd21e',
-            whiteSpace: 'nowrap',
-            background: 'linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0) 100%)',
-            ...L.rebirth,
-          }}
-        >
-          Rebirth Available
-        </span>
-      </div>
-
       <div style={{ textAlign: 'center', marginBottom: L.titleGap }}>
         <span ref={titleRef} style={{ display: 'inline-block', color: '#fff', whiteSpace: 'nowrap', ...L.title }}>
           Age: 0
@@ -215,6 +199,22 @@ export default function LevelBar() {
             </span>
           </div>
         </div>
+      </div>
+
+      <div style={{ textAlign: 'center', marginTop: L.titleGap * 0.6 }}>
+        <span
+          ref={rebirthRef}
+          style={{
+            display: 'none',
+            letterSpacing: 0.5,
+            color: '#ffd21e',
+            whiteSpace: 'nowrap',
+            background: 'linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0) 100%)',
+            ...L.rebirth,
+          }}
+        >
+          Rebirth Available
+        </span>
       </div>
 
       <style>{`

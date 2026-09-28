@@ -11,6 +11,7 @@ import StudJumpsScene from './components/StudJumpsScene.jsx'
 import TsunamiScene from './components/TsunamiScene.jsx'
 import Player from './components/Player.jsx'
 import RemotePlayers from './components/RemotePlayers.jsx'
+import ObjectiveArrowTrail from './components/ObjectiveArrowTrail.jsx'
 import Hud from './components/hud/Hud.jsx'
 import LoadingScreen from './components/LoadingScreen.jsx'
 import { useGameStore } from './store/useGameStore.js'
@@ -78,6 +79,9 @@ export default function App() {
             tsunami are each player's own personal instance, so another
             player's world position there has nothing to render alongside. */}
         {onIsland && <RemotePlayers />}
+        {/* Tutorial guide trail — targets Obby by default; its coordinates
+            are island-space, so it only makes sense on that scene. */}
+        {onIsland && <ObjectiveArrowTrail />}
       </Canvas>
       <Hud />
       <LoadingScreen />
