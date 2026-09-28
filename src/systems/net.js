@@ -295,33 +295,43 @@ function onLocalStoreChangeProgress(state) {
   }
 }
 
-// Applied at most once per page session: the FIRST successful attach's
-// `progress` message is the real load from this player's save. A later
-// reattach (a full drop + fresh joinOrCreate, not the SDK's own buffered
-// reconnection) would otherwise re-fetch a possibly-stale Mongo snapshot and
-// clobber whatever the player did locally during the blip — our own store is
-// already the source of truth by then, and the next scheduled saveProgress
-// writes it back over Mongo regardless.
+// Applied at most once per IDENTITY, not once per page session: the first
+// `progress` message under the current sign-in state is the real load from
+// that account's save. A later reattach under the SAME identity (a full drop
+// + fresh joinOrCreate, not the SDK's own buffered reconnection) would
+// otherwise re-fetch a possibly-stale Mongo snapshot and clobber whatever the
+// player did locally during the blip — our own store is already the source
+// of truth by then, and the next scheduled saveProgress writes it back over
+// Mongo regardless. sendIdentityNow() below resets this back to false on a
+// REAL identity change (guest -> signed-in, or a different account), since
+// that genuinely is a different save to load — see resolveProgress()'s own
+// comment for why the tutorial-resume signal needs that second load too.
 let hydratedFromServer = false
 
 // --- New-vs-returning player signal (systems/tutorial.js) -------------------
-// Resolves exactly once, as soon as we know whether this session has an
-// existing saved doc: true the instant the `progress` message actually
-// arrives below (IslandRoom.ts's loadProgress only ever sends one when a doc
-// was found — a brand-new account just leaves the client on defaults and
-// sends nothing), false once we've given up waiting for one (see
+// Tells every listener whether this session has an existing saved doc: true
+// whenever the `progress` message actually arrives below (IslandRoom.ts's
+// loadProgress only ever sends one when a doc was found — a brand-new
+// account just leaves the client on defaults and sends nothing), false once
+// we've given up waiting for one with nothing found yet (see
 // PROGRESS_KNOWN_TIMEOUT_MS and the confirmed-guest check in init() below).
-// systems/tutorial.js uses this to skip the first-run onboarding entirely for
-// anyone who already has progress, without ever blocking a genuinely new
-// player's tutorial on a slow or absent connection.
-let progressResolved = false
-let progressHadExisting = false
+// systems/tutorial.js uses this to resume onboarding at the right saved step
+// (or hide it entirely for someone already past it) without ever blocking a
+// genuinely new player's tutorial on a slow or absent connection.
+//
+// NOT a one-shot resolve: a `false` conclusion only ever reflects "nothing
+// found YET", so it must never suppress a real `true` that shows up later —
+// e.g. a guest who signs into Bloxity mid-session (sendIdentityNow() below
+// resets hydratedFromServer for exactly this case) and turns out to already
+// have a save. `false` itself still only fires once, so an already-confirmed
+// guest or an already-elapsed timeout doesn't keep re-announcing "still
+// nothing" every time something else calls resolveProgress(false).
+let progressKnownOnce = false
 const progressResolvedListeners = new Set()
 
 function resolveProgress(hasExisting) {
-  if (progressResolved) return
-  progressResolved = true
-  progressHadExisting = hasExisting
+  if (!hasExisting && progressKnownOnce) return
+  progressKnownOnce = true
   for (const fn of progressResolvedListeners) {
     try {
       fn(hasExisting)
@@ -331,11 +341,10 @@ function resolveProgress(hasExisting) {
   }
 }
 
+// No replay for a late subscriber — systems/tutorial.js is this module's
+// only consumer and subscribes at page-load time, well before anything here
+// can have resolved yet.
 export function onProgressResolved(fn) {
-  if (progressResolved) {
-    fn(progressHadExisting)
-    return () => {}
-  }
   progressResolvedListeners.add(fn)
   return () => progressResolvedListeners.delete(fn)
 }

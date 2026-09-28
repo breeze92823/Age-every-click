@@ -93,11 +93,14 @@ export function install() {
   if (installed) return
   installed = true
 
-  // Wait for a possible existing save to hydrate (see onProgressResolved()'s
-  // own comment for the guest/timeout fallbacks that keep this from stalling
-  // a genuinely new player) before reading tutorialStep — a returning
-  // player's saved step, if any, is already on the store by the time this
-  // fires. Defaults to 0 for a guest, a fresh save, or an unresolved check.
+  // Re-syncs to tutorialStep every time net.js confirms a save state — at
+  // page load, and again if a guest signs into Bloxity mid-session and turns
+  // out to already have one (net.js's onProgressResolved() fires again for
+  // exactly that case). A returning player's saved step is already on the
+  // store by the time this runs, so this immediately shows/hides/resumes the
+  // right hint instead of leaving a guest's in-progress tutorial running
+  // under an account that's actually already finished it. Defaults to 0 for
+  // a guest, a fresh save, or an unresolved check.
   onProgressResolved(() => {
     enterStep(useGameStore.getState().tutorialStep)
   })
