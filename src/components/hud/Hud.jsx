@@ -233,8 +233,13 @@ const TOOLBAR_TILES = {
 
 function ToolbarButton({ icon, iconUrl, label, onClick, isTouch, tile, targetId, disabled }) {
   const colors = tile ? TOOLBAR_TILES[tile] : null
+  // Tile buttons render at 0.75x of their original size (box, icon, label).
+  const k = colors ? 0.75 : 1
+  const boxRem = (isTouch ? 5 : 7) * k
   const tileStyle = colors
     ? {
+        width: `${boxRem}rem`,
+        height: `${boxRem}rem`,
         background: `linear-gradient(180deg, ${colors[0]} 0%, ${colors[1]} 100%)`,
         border: `3px solid ${colors[2]}`,
         boxShadow:
@@ -258,7 +263,7 @@ function ToolbarButton({ icon, iconUrl, label, onClick, isTouch, tile, targetId,
       className={`pointer-events-auto flex flex-col items-center justify-center gap-1 text-slate-100 transition ${
         disabled ? 'cursor-not-allowed opacity-40 grayscale' : 'hover:scale-110 hover:brightness-110'
       } ${colors ? 'rounded-xl' : 'rounded-lg'} ${
-        isTouch ? (colors ? 'h-20 w-20' : 'h-16 w-16') : colors ? 'h-28 w-28' : 'h-20 w-20'
+        colors ? '' : isTouch ? 'h-16 w-16' : 'h-20 w-20'
       }`}
     >
       {iconUrl ? (
@@ -266,14 +271,16 @@ function ToolbarButton({ icon, iconUrl, label, onClick, isTouch, tile, targetId,
           src={iconUrl}
           alt=""
           draggable={false}
-          className={isTouch ? 'h-11 w-11' : 'h-12 w-12'}
-          style={{ filter: 'drop-shadow(0 0 6px rgba(255,255,255,0.5))' }}
+          style={{
+            width: `${(isTouch ? 2.75 : 3) * k}rem`,
+            height: `${(isTouch ? 2.75 : 3) * k}rem`,
+            filter: 'drop-shadow(0 0 6px rgba(255,255,255,0.5))' }}
         />
       ) : (
         <span
           className="leading-none"
           style={{
-            fontSize: isTouch ? '2.75rem' : '3rem',
+            fontSize: `${(isTouch ? 2.75 : 3) * k}rem`,
             WebkitTextStroke: '5px black',
             paintOrder: 'stroke fill',
             filter: 'brightness(1.35) saturate(1.3) drop-shadow(0 0 6px rgba(255,255,255,0.5))',
@@ -285,7 +292,7 @@ function ToolbarButton({ icon, iconUrl, label, onClick, isTouch, tile, targetId,
       <span
         className="font-semibold leading-none tracking-wide"
         style={{
-          fontSize: isTouch ? '16px' : '1.5rem',
+          fontSize: `${(isTouch ? 1 : 1.5) * k}rem`,
           WebkitTextStroke: '2px black',
           paintOrder: 'stroke fill',
         }}

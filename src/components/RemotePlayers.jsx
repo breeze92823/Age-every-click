@@ -33,7 +33,7 @@ function parseAvatar(raw) {
 // sender has equipped) whenever their `avatar` payload changes, and every
 // frame reads position/yaw/moveBlend straight off `p` — systems/net.js keeps
 // those fields patched in place as `move` packets arrive, no callback needed.
-function RemotePlayer({ p }) {
+function RemotePlayer({ p, scene }) {
   const ref = useRef()
   const gaitRef = useRef(null)
   const posRef = useRef(null)
@@ -81,6 +81,13 @@ function RemotePlayer({ p }) {
 
     const g = ref.current
     if (!g) return
+    // Only render this session alongside players who are actually sharing
+    // the current scene/instance right now (systems/net.js's `scene` field
+    // on PlayerState) — an island player must never appear to be standing
+    // on the separately-located Impossible Bridge, or vice versa.
+    const visible = p.scene === scene
+    g.visible = visible
+    if (!visible) return
     if (!posRef.current) posRef.current = new Vector3(p.x, p.y, p.z)
     posRef.current.lerp(_targetPos.set(p.x, p.y, p.z), 1 - Math.pow(LERP_RATE, delta))
     g.position.copy(posRef.current)
@@ -103,7 +110,10 @@ function RemotePlayer({ p }) {
 
 // Mounts one RemotePlayer per other connected session (systems/net.js's
 // subscribeRoster()) — every player in the shared room except ourselves.
-export default function RemotePlayers() {
+// `scene` is the LOCAL player's current scene; each RemotePlayer stays
+// mounted (so its avatar/gait persist across a scene switch either side)
+// but only renders while the remote session reports the same scene.
+export default function RemotePlayers({ scene }) {
   const [ids, setIds] = useState(() => [])
   const playersRef = useRef(new Map())
 
@@ -124,7 +134,7 @@ export default function RemotePlayers() {
     <>
       {ids.map((id) => {
         const p = playersRef.current.get(id)
-        return p ? <RemotePlayer key={id} p={p} /> : null
+        return p ? <RemotePlayer key={id} p={p} scene={scene} /> : null
       })}
     </>
   )

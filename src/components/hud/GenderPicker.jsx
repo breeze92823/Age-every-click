@@ -1,17 +1,15 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  ACESFilmicToneMapping,
   DirectionalLight,
   HemisphereLight,
   OrthographicCamera,
-  PCFSoftShadowMap,
   Scene,
   SRGBColorSpace,
   WebGLRenderer,
 } from 'three'
 import { useGameStore } from '../../store/useGameStore.js'
-import { buildDefaultCharacter } from '../../systems/defaultCharacter.js'
+import { buildBlockyFigure } from '../../systems/blockyPortrait.js'
 import { playButtonClick, playButtonHover } from '../../systems/sfx.js'
 import { useTouchMode } from './hooks.js'
 
@@ -20,8 +18,8 @@ import { useTouchMode } from './hooks.js'
 // which un-freezes the player (systems/playerMovement.js) and dresses the
 // character (Player.jsx). The X skips the choice and keeps the boy.
 //
-// The portraits are the game's own character, rendered once each into a
-// throwaway WebGL context so they always match what the player will see.
+// The portraits are blocky Minecraft-style figures (systems/blockyPortrait.js),
+// rendered once each into a throwaway WebGL context.
 
 const OUTLINE = { WebkitTextStroke: '0.06em black', paintOrder: 'stroke fill' }
 const PORTRAIT_PX = 320
@@ -32,30 +30,26 @@ function renderPortraits() {
   renderer.setPixelRatio(1)
   renderer.setClearColor(0x000000, 0)
   renderer.outputColorSpace = SRGBColorSpace
-  renderer.toneMapping = ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.1
-  renderer.shadowMap.enabled = true
-  renderer.shadowMap.type = PCFSoftShadowMap
 
   const scene = new Scene()
-  scene.add(new HemisphereLight('#dce8f2', '#a89a80', 1.3))
-  const sun = new DirectionalLight('#ffffff', 2)
+  scene.add(new HemisphereLight('#ffffff', '#b9b2a6', 1.9))
+  const sun = new DirectionalLight('#ffffff', 1.2)
   sun.position.set(2, 4, 5)
   scene.add(sun)
 
-  // Head and torso, like the reference art: the character is 1.8 m tall.
-  const camera = new OrthographicCamera(-0.9, 0.9, 0.9, -0.9, 0.1, 20)
-  camera.position.set(0, 1.2, 6)
-  camera.lookAt(0, 1.2, 0)
+  // Head, torso and the top of the trousers, face on.
+  const camera = new OrthographicCamera(-3, 3, 3, -3, 0.1, 40)
+  camera.position.set(0, 1.6, 20)
+  camera.lookAt(0, 1.6, 0)
 
   const out = {}
   for (const gender of ['boy', 'girl']) {
-    const character = buildDefaultCharacter('striped', gender)
-    character.rotation.y = gender === 'boy' ? 0.25 : -0.25
-    scene.add(character)
+    const { group, dispose } = buildBlockyFigure(gender)
+    scene.add(group)
     renderer.render(scene, camera)
     out[gender] = renderer.domElement.toDataURL('image/png')
-    scene.remove(character)
+    scene.remove(group)
+    dispose()
   }
   renderer.dispose()
   renderer.forceContextLoss()
@@ -76,7 +70,7 @@ function Card({ label, image, from, to, ring, onPick }) {
         {image && <img src={image} alt="" draggable={false} className="absolute inset-0 h-full w-full object-cover" />}
       </div>
       <span
-        className={`-mt-[0.6em] w-[86%] rounded-lg border-[3px] border-black bg-gradient-to-b py-1 text-center text-[clamp(1.25rem,min(5vw,9dvh),3.25rem)] font-black leading-none text-white shadow-[0_4px_0_rgba(0,0,0,0.35)] transition group-hover:brightness-110 group-active:brightness-95 ${from} ${to}`}
+        className={`relative z-10 -mt-[0.6em] w-[86%] rounded-lg border-[3px] border-black bg-gradient-to-b py-1 text-center text-[clamp(1.25rem,min(5vw,9dvh),3.25rem)] font-black leading-none text-white shadow-[0_4px_0_rgba(0,0,0,0.35)] transition group-hover:brightness-110 group-active:brightness-95 ${from} ${to}`}
         style={OUTLINE}
       >
         {label}
@@ -120,7 +114,7 @@ export default function GenderPicker() {
       aria-modal="true"
       aria-label="Pick your gender"
     >
-      <div className="relative w-full max-w-[min(860px,170dvh)]">
+      <div className="relative w-full max-w-[min(860px,170dvh)]" style={{ transform: 'scale(0.8)' }}>
         <span
           className={`pointer-events-none absolute z-10 -rotate-3 font-black leading-none text-white ${
             isTouch ? '-left-1 -top-2 text-2xl' : '-left-3 -top-[0.75em] text-[clamp(1.75rem,min(7vw,12dvh),4.5rem)]'

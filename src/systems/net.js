@@ -446,6 +446,71 @@ export function reportLocal(delta) {
   }
 }
 
+// --- Scene relay (remote-player filtering) -------------------------------
+// Which scene/instance this client is currently in (store/useGameStore.js's
+// currentScene), relayed so every other client's components/
+// RemotePlayers.jsx only renders us alongside players actually sharing the
+// same scene right now (e.g. so an island player never appears to be
+// standing on the separately-located Impossible Bridge, or vice versa).
+// Sent once on connect/reattach and again on every scene change, same
+// human-speed cadence as sendAvatarNow()/sendIdentityNow().
+let lastSentScene = ''
+
+function sendSceneNow() {
+  if (!room) return
+  const scene = useGameStore.getState().currentScene
+  if (scene === lastSentScene) return
+  lastSentScene = scene
+  try {
+    room.send('setScene', { scene })
+  } catch {
+    // Socket mid-close — the next attach re-seeds via the forced resend below.
+  }
+}
+
+function onLocalStoreChangeScene(state) {
+  if (state.currentScene !== lastSentScene) sendSceneNow()
+}
+
+// --- Impossible Bridge shared puzzle (systems/bonusBridge.js) -----------
+// The room's own live BridgeTileState array (server rooms/IslandRoom.ts's
+// IslandState.bridgeTiles) — same "read the synced schema instance directly
+// every frame, no callback needed" pattern as remotePlayers above.
+// systems/bonusBridge.js mirrors safe/broken/bounced off this every frame
+// while connected, and falls back to its own local-randomized layout when
+// this returns null (no server, or not yet attached) so solo play is never
+// blocked on a room existing.
+export function getBridgeTiles() {
+  return room && room.state && room.state.bridgeTiles ? room.state.bridgeTiles : null
+}
+
+// Reports a footstep on Impossible Bridge tile `tileIndex` — the room alone
+// decides whether that lane is safe (BridgeTileState.safe) and mutates the
+// shared broken/bounced flags; the outcome reaches every client, including
+// this one, back over the synced state above, not as a return value here.
+export function sendBridgeStep(tileIndex) {
+  if (!room) return
+  try {
+    room.send('bridgeStep', { tileIndex })
+  } catch {
+    // Socket mid-close — harmless, the next frame's footstep check retries.
+  }
+}
+
+// Reports a fall/timeout on the Impossible Bridge (systems/bonusBridge.js's
+// respawnAtStart()) — the room counts these across the whole group and
+// rerolls the shared layout once BRIDGE_RESHUFFLE_AFTER_FAILS piles up (see
+// IslandRoom.ts's `bridgeFail` handler), so the puzzle doesn't stay solved
+// forever once everyone's learned it.
+export function sendBridgeFail() {
+  if (!room) return
+  try {
+    room.send('bridgeFail', {})
+  } catch {
+    // Socket mid-close — harmless, a later fail retries the count.
+  }
+}
+
 // --- Lucky Wheel free spin --------------------------------------------------
 // The daily free spin's 24h cooldown is checked and stamped by the SERVER for a
 // signed-in player (IslandRoom.ts's claimFreeSpin), so it survives reloads and
@@ -699,6 +764,10 @@ function attachRoom(joined) {
   // race an early setAvatar before the room finishes handshaking).
   lastSentAvatar = ''
   sendAvatarNow()
+  // Ditto for scene — a fresh room has no idea which instance we're
+  // currently in until this fires.
+  lastSentScene = ''
+  sendSceneNow()
   lastSentMove = null
   moveAccumMs = MOVE_SEND_INTERVAL_MS // send the very next reportLocal() tick
   // The join options already carried whatever identity was true the instant
@@ -738,6 +807,7 @@ let offIdentity = null
 let offAvatarStore = null
 let offAvatarChanged = null
 let offProportionsChanged = null
+let offScene = null
 
 export function init() {
   if (started) return
@@ -772,6 +842,9 @@ export function init() {
   if (!offAvatarStore) offAvatarStore = useGameStore.subscribe(onLocalStoreChangeAvatar)
   if (!offAvatarChanged) offAvatarChanged = onAvatarChanged(() => sendAvatarNow())
   if (!offProportionsChanged) offProportionsChanged = onProportionsChanged(() => sendAvatarNow())
+  // Scene changes (portal in/out of the Impossible Bridge, etc.) -> the
+  // room, immediately (see sendSceneNow()'s own comment).
+  if (!offScene) offScene = useGameStore.subscribe(onLocalStoreChangeScene)
   waitForAuth(USERNAME_WAIT_MS).then(() => {
     // A confirmed guest never gets a `progress` message (loadProgress is only
     // ever called for a signed-in userId) — resolve now instead of riding out
@@ -814,6 +887,11 @@ export function teardown() {
     offProportionsChanged()
     offProportionsChanged = null
   }
+  if (offScene) {
+    offScene()
+    offScene = null
+  }
+  lastSentScene = ''
   // Every remote character mounted by components/RemotePlayers.jsx belongs
   // to this room — same reasoning as handleLeave()'s own clear.
   for (const sessionId of remotePlayers.keys()) notifyRosterRemove(sessionId)

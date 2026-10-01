@@ -75,10 +75,13 @@ export default function App() {
           {currentScene === 'tsunami' && <TsunamiScene />}
         </Suspense>
         <Player />
-        {/* Other sessions in the shared island room only — bonus/studJumps/
-            tsunami are each player's own personal instance, so another
-            player's world position there has nothing to render alongside. */}
-        {onIsland && <RemotePlayers />}
+        {/* Other sessions sharing the island or the Impossible Bridge (bonus)
+            — the bridge's tile puzzle is a shared room-wide instance (see
+            systems/bonusBridge.js), so other players there are worth
+            rendering too. studJumps/tsunami stay each player's own personal
+            instance, so another player's world position there has nothing
+            to render alongside. */}
+        {(currentScene === 'island' || currentScene === 'bonus') && <RemotePlayers scene={currentScene} />}
         {/* Tutorial guide trail — targets Obby by default; its coordinates
             are island-space, so it only makes sense on that scene. */}
         {onIsland && <ObjectiveArrowTrail />}
