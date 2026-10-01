@@ -1,19 +1,15 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  ACESFilmicToneMapping,
-  BoxGeometry,
   DirectionalLight,
   HemisphereLight,
   OrthographicCamera,
-  PCFSoftShadowMap,
   Scene,
   SRGBColorSpace,
   WebGLRenderer,
 } from 'three'
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { useGameStore } from '../../store/useGameStore.js'
-import { buildDefaultCharacter } from '../../systems/defaultCharacter.js'
+import { buildBlockyFigure } from '../../systems/blockyPortrait.js'
 import { playButtonClick, playButtonHover } from '../../systems/sfx.js'
 import { useTouchMode } from './hooks.js'
 
@@ -22,31 +18,11 @@ import { useTouchMode } from './hooks.js'
 // which un-freezes the player (systems/playerMovement.js) and dresses the
 // character (Player.jsx). The X skips the choice and keeps the boy.
 //
-// The portraits are the game's own character, rendered once each into a
-// throwaway WebGL context so they always match what the player will see.
+// The portraits are blocky Minecraft-style figures (systems/blockyPortrait.js),
+// rendered once each into a throwaway WebGL context.
 
 const OUTLINE = { WebkitTextStroke: '0.06em black', paintOrder: 'stroke fill' }
 const PORTRAIT_PX = 320
-
-// Swaps every rounded part for a sharp-edged box of the same size, so the
-// portrait reads as a blocky Bloxity / Minecraft figure. Only the cached copy
-// in the portrait is changed; the in-game character keeps its soft corners.
-function squareOff(character) {
-  const boxes = []
-  character.traverse((o) => {
-    if (o.isMesh && !o.isSkinnedMesh && o.geometry instanceof RoundedBoxGeometry) boxes.push(o)
-  })
-  const made = []
-  for (const o of boxes) {
-    o.geometry.computeBoundingBox()
-    const { min, max } = o.geometry.boundingBox
-    const geo = new BoxGeometry(max.x - min.x, max.y - min.y, max.z - min.z)
-    geo.translate((max.x + min.x) / 2, (max.y + min.y) / 2, (max.z + min.z) / 2)
-    o.geometry = geo
-    made.push(geo)
-  }
-  return made
-}
 
 function renderPortraits() {
   const renderer = new WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true })
@@ -54,32 +30,26 @@ function renderPortraits() {
   renderer.setPixelRatio(1)
   renderer.setClearColor(0x000000, 0)
   renderer.outputColorSpace = SRGBColorSpace
-  renderer.toneMapping = ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.1
-  renderer.shadowMap.enabled = true
-  renderer.shadowMap.type = PCFSoftShadowMap
 
   const scene = new Scene()
-  scene.add(new HemisphereLight('#dce8f2', '#a89a80', 1.3))
-  const sun = new DirectionalLight('#ffffff', 2)
+  scene.add(new HemisphereLight('#ffffff', '#b9b2a6', 1.9))
+  const sun = new DirectionalLight('#ffffff', 1.2)
   sun.position.set(2, 4, 5)
   scene.add(sun)
 
-  // Head and torso, like the reference art: the character is 1.8 m tall.
-  const camera = new OrthographicCamera(-0.9, 0.9, 0.9, -0.9, 0.1, 20)
-  camera.position.set(0, 1.2, 6)
-  camera.lookAt(0, 1.2, 0)
+  // Head, torso and the top of the trousers, face on.
+  const camera = new OrthographicCamera(-3, 3, 3, -3, 0.1, 40)
+  camera.position.set(0, 1.6, 20)
+  camera.lookAt(0, 1.6, 0)
 
   const out = {}
   for (const gender of ['boy', 'girl']) {
-    const character = buildDefaultCharacter('striped', gender)
-    const boxes = squareOff(character)
-    character.rotation.y = gender === 'boy' ? 0.5 : -0.5
-    scene.add(character)
+    const { group, dispose } = buildBlockyFigure(gender)
+    scene.add(group)
     renderer.render(scene, camera)
     out[gender] = renderer.domElement.toDataURL('image/png')
-    scene.remove(character)
-    for (const geo of boxes) geo.dispose()
+    scene.remove(group)
+    dispose()
   }
   renderer.dispose()
   renderer.forceContextLoss()
@@ -100,7 +70,7 @@ function Card({ label, image, from, to, ring, onPick }) {
         {image && <img src={image} alt="" draggable={false} className="absolute inset-0 h-full w-full object-cover" />}
       </div>
       <span
-        className={`-mt-[0.6em] w-[86%] rounded-lg border-[3px] border-black bg-gradient-to-b py-1 text-center text-[clamp(1.25rem,min(5vw,9dvh),3.25rem)] font-black leading-none text-white shadow-[0_4px_0_rgba(0,0,0,0.35)] transition group-hover:brightness-110 group-active:brightness-95 ${from} ${to}`}
+        className={`relative z-10 -mt-[0.6em] w-[86%] rounded-lg border-[3px] border-black bg-gradient-to-b py-1 text-center text-[clamp(1.25rem,min(5vw,9dvh),3.25rem)] font-black leading-none text-white shadow-[0_4px_0_rgba(0,0,0,0.35)] transition group-hover:brightness-110 group-active:brightness-95 ${from} ${to}`}
         style={OUTLINE}
       >
         {label}
