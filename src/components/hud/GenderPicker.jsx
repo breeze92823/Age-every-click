@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   ACESFilmicToneMapping,
+  BoxGeometry,
   DirectionalLight,
   HemisphereLight,
   OrthographicCamera,
@@ -10,6 +11,7 @@ import {
   SRGBColorSpace,
   WebGLRenderer,
 } from 'three'
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { useGameStore } from '../../store/useGameStore.js'
 import { buildDefaultCharacter } from '../../systems/defaultCharacter.js'
 import { playButtonClick, playButtonHover } from '../../systems/sfx.js'
@@ -25,6 +27,26 @@ import { useTouchMode } from './hooks.js'
 
 const OUTLINE = { WebkitTextStroke: '0.06em black', paintOrder: 'stroke fill' }
 const PORTRAIT_PX = 320
+
+// Swaps every rounded part for a sharp-edged box of the same size, so the
+// portrait reads as a blocky Bloxity / Minecraft figure. Only the cached copy
+// in the portrait is changed; the in-game character keeps its soft corners.
+function squareOff(character) {
+  const boxes = []
+  character.traverse((o) => {
+    if (o.isMesh && !o.isSkinnedMesh && o.geometry instanceof RoundedBoxGeometry) boxes.push(o)
+  })
+  const made = []
+  for (const o of boxes) {
+    o.geometry.computeBoundingBox()
+    const { min, max } = o.geometry.boundingBox
+    const geo = new BoxGeometry(max.x - min.x, max.y - min.y, max.z - min.z)
+    geo.translate((max.x + min.x) / 2, (max.y + min.y) / 2, (max.z + min.z) / 2)
+    o.geometry = geo
+    made.push(geo)
+  }
+  return made
+}
 
 function renderPortraits() {
   const renderer = new WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true })
@@ -51,11 +73,13 @@ function renderPortraits() {
   const out = {}
   for (const gender of ['boy', 'girl']) {
     const character = buildDefaultCharacter('striped', gender)
-    character.rotation.y = gender === 'boy' ? 0.25 : -0.25
+    const boxes = squareOff(character)
+    character.rotation.y = gender === 'boy' ? 0.5 : -0.5
     scene.add(character)
     renderer.render(scene, camera)
     out[gender] = renderer.domElement.toDataURL('image/png')
     scene.remove(character)
+    for (const geo of boxes) geo.dispose()
   }
   renderer.dispose()
   renderer.forceContextLoss()
@@ -120,7 +144,7 @@ export default function GenderPicker() {
       aria-modal="true"
       aria-label="Pick your gender"
     >
-      <div className="relative w-full max-w-[min(860px,170dvh)]">
+      <div className="relative w-full max-w-[min(860px,170dvh)]" style={{ transform: 'scale(0.8)' }}>
         <span
           className={`pointer-events-none absolute z-10 -rotate-3 font-black leading-none text-white ${
             isTouch ? '-left-1 -top-2 text-2xl' : '-left-3 -top-[0.75em] text-[clamp(1.75rem,min(7vw,12dvh),4.5rem)]'
